@@ -1,2 +1,13 @@
 // See the Electron documentation for details on how to use preload scripts:
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
+import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
+
+contextBridge.exposeInMainWorld('api', {
+  // för push från main (setInterval)
+  onNewImage: (callback: (payload: { dataUrl: string; fileName: string }) => void) => {
+    const wrapper = (_event: IpcRendererEvent, payload: any) => callback(payload);
+    ipcRenderer.on('new-image', wrapper);
+    // returnera en funktion för att sluta lyssna om du vill:
+    return () => ipcRenderer.removeListener('new-image', wrapper);
+  },
+});

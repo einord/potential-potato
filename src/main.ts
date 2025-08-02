@@ -1,21 +1,29 @@
-import { app, BrowserWindow } from 'electron';
-import path from 'node:path';
-import started from 'electron-squirrel-startup';
-import { currentSettings, ensureSettingsFile, loadSettings, settingsFile } from './settings'; // Ensure settings are initialized
-import chokidar from 'chokidar';
+import { app, BrowserWindow } from 'electron'
+import path from 'node:path'
+import started from 'electron-squirrel-startup'
+import { currentSmbSettings, ensureSmbSettingsFile, loadSmbSettings, smbSettingsFile } from './settings' // Ensure settings are initialized
+import chokidar from 'chokidar'
+import { loadSmbImage, remoteSettings } from './settings/loadimages'
+
+let refreshTimer: NodeJS.Timeout | string | number | undefined
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
   app.quit();
 }
 
-const createWindow = () => {
+let mainWindow : BrowserWindow | undefined = undefined
+let timeout: number = 10
+
+const createWindow = async () => {
   // Create the browser window.
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
     fullscreen: true,
     webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
       preload: path.join(__dirname, 'preload.js'),
     },
   });
@@ -27,18 +35,20 @@ const createWindow = () => {
     mainWindow.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`));
   }
 
+  // Open the DevTools.
+  // mainWindow.webContents.openDevTools();
+
   // Ensure and load settings
-  ensureSettingsFile().then(() => {
-    loadSettings()
-    watchSettingsFile(mainWindow)
-  })
+  await ensureSmbSettingsFile()
+  await loadSmbSettings()
+  watchSmbSettingsFile(mainWindow)
+  
+  await loadNextImage()
+  setRefreshTimer();
 
   mainWindow.webContents.on('did-finish-load', () => {
-    mainWindow?.webContents.send('settings-updated', currentSettings)
+    mainWindow?.webContents.send('smb-settings-updated', currentSmbSettings)
   })
-
-  // // Open the DevTools.
-  // mainWindow.webContents.openDevTools();
 };
 
 // This method will be called when Electron has finished
@@ -64,11 +74,46 @@ app.on('activate', () => {
 });
 
 // Watch for changes in the settings file
-export function watchSettingsFile(mainWindow: BrowserWindow) {
-  const watcher = chokidar.watch(settingsFile, { ignoreInitial: true });
+function watchSmbSettingsFile(mainWindow: BrowserWindow) {
+  const watcher = chokidar.watch(smbSettingsFile, { ignoreInitial: true });
   watcher.on('change', async () => {
-      console.log(`Settings file changed: ${settingsFile}. Reloading settings...`);
-      await loadSettings();
-      mainWindow.webContents.send('settings-updated', currentSettings);
+      console.log(`SMB settings file changed: ${smbSettingsFile}. Reloading SMB settings...`);
+      await loadSmbSettings();
+      setRefreshTimer();
+      mainWindow.webContents.send('smb-settings-updated', currentSmbSettings);
   });
+}
+
+function getTimeoutFromRefreshRate(refreshRate: number | undefined): number {
+  return (refreshRate || 10) * 1000
+}
+
+function setRefreshTimer() {
+  if (refreshTimer) {
+    clearInterval(refreshTimer);
+  }
+
+  timeout = getTimeoutFromRefreshRate(remoteSettings?.refreshRate)
+  refreshTimer = setInterval(loadNextImage, timeout)
+}
+
+async function loadNextImage() {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+
+  console.log(`Refreshing image...`);
+  try {
+    const imageData = await loadSmbImage();
+    console.log('Random image loaded from SMB');
+    if (imageData) {
+      // Send the image data to the renderer process
+      mainWindow.webContents.send('new-image', imageData);
+    }
+
+    if(getTimeoutFromRefreshRate(remoteSettings?.refreshRate) != timeout) {
+      console.log('Remote timer settings changed, resetting refresh timer.')
+      setRefreshTimer()
+    }
+  } catch (error) {
+    console.error('Error loading next image:', error);
+  }
 }

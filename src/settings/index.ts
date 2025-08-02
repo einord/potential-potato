@@ -1,41 +1,54 @@
-import { app } from 'electron';
-import { join } from 'path';
-import { promises as fs } from 'fs';
+import { app } from 'electron'
+import { join } from 'path'
+import { promises as fs } from 'fs'
 
-const userDataPath = app.getPath('userData');
-export const settingsFile = join(userDataPath, 'settings.json');
-export let currentSettings: Settings | undefined = undefined;
+const userDataPath = app.getPath('userData')
+export const smbSettingsFile = join(userDataPath, 'pp-smb.json')
+export let currentSmbSettings: SmbSettings | undefined = undefined
 
-interface Settings {
-    refreshRate: number;
+export interface SmbSettings {
+    host?: string
+    port?: number
+    share?: string
+    domain?: string
+    username?: string
+    password?: string
+    directory?: string
 }
 
-const defaultSettings: Settings = {
-    refreshRate: 60 * 1000, // Default to 60 seconds
-};
+const defaultSmbSettings: SmbSettings = {
+    host: '',
+    port: 445,
+    share: '',
+    domain: '',
+    username: '',
+    password: '',
+    directory: ''
+}
 
-export async function ensureSettingsFile() {
+export async function ensureSmbSettingsFile() {
     try {
-        await fs.access(settingsFile);
+        await fs.access(smbSettingsFile);
     } catch {
         // If the file does not exist, create it with default settings
         await fs.mkdir(userDataPath, { recursive: true });
-        await fs.writeFile(settingsFile, JSON.stringify(defaultSettings, null, 2), 'utf-8');
-        console.log(`Settings file created with default settings at ${settingsFile}.`);
+        await fs.writeFile(smbSettingsFile, JSON.stringify(defaultSmbSettings, null, 2), 'utf-8');
+        console.log(`Settings file created with default settings at ${smbSettingsFile}.`);
     }
 }
 
-export async function loadSettings() {
+export async function loadSmbSettings() {
     try {
-        const raw = await fs.readFile(settingsFile, 'utf-8');
-        currentSettings = JSON.parse(raw) as Settings;
-        console.log(`Settings loaded from ${settingsFile}:`, currentSettings);
+        const raw = await fs.readFile(smbSettingsFile, 'utf-8');
+        currentSmbSettings = JSON.parse(raw) as SmbSettings;
+        // console.log(`Settings loaded from ${smbSettingsFile}:`, currentSmbSettings);
+        console.log(`Settings loaded from ${smbSettingsFile}`);
     } catch {
-        console.error(`Failed to load settings from ${settingsFile}.`);
-        currentSettings = defaultSettings; // Fallback to default settings
+        console.error(`Failed to load settings from ${smbSettingsFile}.`);
+        currentSmbSettings = defaultSmbSettings; // Fallback to default settings
     }
 
-    return currentSettings
+    return currentSmbSettings
 }
 
 

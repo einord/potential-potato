@@ -14,6 +14,9 @@ importers:
       electron-squirrel-startup:
         specifier: ^1.0.1
         version: 1.0.1
+      v9u-smb2:
+        specifier: ^1.0.6
+        version: 1.0.6
     devDependencies:
       '@electron-forge/cli':
         specifier: ^7.8.2
@@ -45,6 +48,9 @@ importers:
       '@types/electron-squirrel-startup':
         specifier: ^1.0.2
         version: 1.0.2
+      '@types/smb2':
+        specifier: ^0.2.4
+        version: 0.2.4
       '@typescript-eslint/eslint-plugin':
         specifier: ^5.62.0
         version: 5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@4.5.5))(eslint@8.57.1)(typescript@4.5.5)
@@ -555,6 +561,9 @@ packages:
 
   '@types/semver@7.7.0':
     resolution: {integrity: sha512-k107IF4+Xr7UHjwDc7Cfd6PRQfbdkiRabXGRjo07b4WyPahFBZCZ1sE+BNxYIJPPg73UkfOsVOLwqVc/6ETrIA==}
+
+  '@types/smb2@0.2.4':
+    resolution: {integrity: sha512-cxC2aO0OkX61903hUsf4qhM2YFE3FEYAFtRxwD1ZZTX6a0e1Hv7TZrnQ3WGU7u5kOeH809l6iDal4hDTNuBzkw==}
 
   '@types/yauzl@2.10.3':
     resolution: {integrity: sha512-oJoftv0LSuaDZE3Le4DbKX+KS9G36NzOeSap90UIK0yMA/NhKJhqlSGtNDORNRaIbQfzjXDrQa0ytJ6mNRGz/Q==}
@@ -1147,6 +1156,9 @@ packages:
 
   exponential-backoff@3.1.2:
     resolution: {integrity: sha512-8QxYTVXUkuy7fIIoitQkPwGonB8F3Zj8eEO8Sqg9Zv/bkI7RJAzowee4gr81Hak/dUTpA2Z7VfQgoijjPNlUZA==}
+
+  extend@3.0.2:
+    resolution: {integrity: sha512-fjquC59cD7CyW6urNXK0FBufkZcoiGG80wTuPujX590cB5Ttln20E2UB4S/WARVqhXffZl2LNgS+gQdPIIim/g==}
 
   extract-zip@2.0.1:
     resolution: {integrity: sha512-GDhU9ntwuKyGXdZBUgTIe+vXnWj0fppUEtMDL0+idd5Sta8TGpHssn/eusA9mrPr9qNDym6SxAYZjNvCn/9RBg==}
@@ -1818,6 +1830,9 @@ packages:
     resolution: {integrity: sha512-lJxZYlT4DW/bRUtFh1MQIWqmLwQfAxnqWG4HhEdjMlkrJYnJn0Jrr2u3mgxqaWsdiBc76TYkTG/mhrnYTuzfHw==}
     engines: {node: '>=4'}
 
+  ntlm2@0.3.0:
+    resolution: {integrity: sha512-q4QRTBGjLhxMnoUFPak6IKehlGMsWp14Vu+VU4JdxMeS4Olm7/N7+HJlqrYesUCI0RBoc40rXvFO3WENpGDBbw==}
+
   object-inspect@1.13.4:
     resolution: {integrity: sha512-W67iLl4J2EXEGTbfeHCffrjDfitvLANg0UlX3wFUUSTx92KXRFegMHUVgSqE+wvhAbi4WqjGg9czysTV2Epbew==}
     engines: {node: '>= 0.4'}
@@ -2431,6 +2446,10 @@ packages:
 
   util-deprecate@1.0.2:
     resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
+
+  v9u-smb2@1.0.6:
+    resolution: {integrity: sha512-xXFGQzOL0X6E//le+1rlEeyam+3jgk2vNSqs/2h1XuyIog5l47+hL3KcZh4fA4qTBuwFiEfH1sG7ZFpPT6VtWQ==}
+    engines: {node: '>=10'}
 
   validate-npm-package-license@3.0.4:
     resolution: {integrity: sha512-DpKm2Ui/xN7/HQKCtpZxoRWBhZ9Z0kqtygG8XCgNQ8ZlDnxuQmWhj566j8fN4Cu3/JmbhsDo7fcAJq4s9h27Ew==}
@@ -3164,6 +3183,8 @@ snapshots:
       '@types/node': 24.1.0
 
   '@types/semver@7.7.0': {}
+
+  '@types/smb2@0.2.4': {}
 
   '@types/yauzl@2.10.3':
     dependencies:
@@ -3971,6 +3992,8 @@ snapshots:
 
   exponential-backoff@3.1.2: {}
 
+  extend@3.0.2: {}
+
   extract-zip@2.0.1:
     dependencies:
       debug: 4.4.1
@@ -4702,6 +4725,10 @@ snapshots:
     dependencies:
       path-key: 2.0.1
 
+  ntlm2@0.3.0:
+    dependencies:
+      extend: 3.0.2
+
   object-inspect@1.13.4: {}
 
   object-keys@1.1.1: {}
@@ -5376,6 +5403,11 @@ snapshots:
       mem: 4.3.0
 
   util-deprecate@1.0.2: {}
+
+  v9u-smb2@1.0.6:
+    dependencies:
+      ntlm2: 0.3.0
+      readable-stream: 3.6.2
 
   validate-npm-package-license@3.0.4:
     dependencies:
