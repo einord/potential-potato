@@ -1,7 +1,8 @@
 {
   "compilerOptions": {
     "target": "ESNext",
-    "module": "commonjs",
+    // "module": "commonjs",
+    "module": "esnext",
     "allowJs": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
@@ -10,6 +11,8 @@
     "baseUrl": ".",
     "outDir": "dist",
     "moduleResolution": "node",
-    "resolveJsonModule": true
-  }
+    "resolveJsonModule": true,
+    "types": ["vite/client"],
+  },
+  "include": ["src", "src/vite-env.d.ts"]
 }

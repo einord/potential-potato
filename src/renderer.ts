@@ -28,4 +28,10 @@
 
 import './index.css';
 
+// Add custom modules
+const components = import.meta.glob('./components/*.ts', { eager: true });
+Object.keys(components).forEach((key) => {
+    console.log(`Loading component: ${key}`);
+});
+
 console.log('👋 This message is being logged by "renderer.ts", included via Vite');

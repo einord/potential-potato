@@ -1,0 +1,6 @@
+{
+    "npm.packageManager": "pnpm",
+    "explorer.fileNesting.patterns": {
+        "*.ts": "${capture}.js, ${capture}.*"
+    }
+}
