@@ -4,7 +4,9 @@ import { currentSmbSettings, SmbSettings } from ".";
 import * as os from 'os'
 
 export interface RemoteSettings {
-    refreshRate: number
+    refreshRate: number,
+    passepartoutColor?: string,
+    passepartoutWidth?: number,
 }
 
 export let remoteSettings: RemoteSettings | undefined = undefined
@@ -91,15 +93,6 @@ export async function loadRemoteSettings(dir: string) {
     console.warn("Failed to parse settings file as JSON.")
   }
 }
-
-// async function listImagesInDir(dir: string): Promise<string[]> {
-//   return new Promise((resolve, reject) => {
-//     smbClient.readdir(dir, (err, files) => {
-//       if (err) return reject(err);
-//       resolve(files.filter((f: string) => IMAGE_EXTS.test(f)));
-//     });
-//   });
-// }
 
 async function listImagesInDir(dir: string): Promise<{dir: string, files: string[]}> {
   const now = new Date()
