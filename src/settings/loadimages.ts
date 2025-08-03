@@ -19,12 +19,12 @@ export async function loadSmbImage() {
   // Init SMB client with current settings
   await initSmb();
 
-  const dir = currentSmbSettings.directory;
+  const rootDir = currentSmbSettings.directory;
   
   // First load the latest settings
-  await loadRemoteSettings(dir);
+  await loadRemoteSettings(rootDir);
   
-  const files = await listImagesInDir(dir);
+  const {dir, files} = await listImagesInDir(rootDir);
   if (files.length === 0) {
     throw new Error(`Inga bilder hittades i ${dir}`);
   } else {
@@ -41,6 +41,7 @@ export async function loadSmbImage() {
   // returnerar både filnamn och data
   return {
     fileName: chosen,
+    settings: remoteSettings,
     dataUrl: `data:image/${path.extname(chosen).slice(1)};base64,${data64}`,
   };
 }
@@ -91,14 +92,34 @@ export async function loadRemoteSettings(dir: string) {
   }
 }
 
+// async function listImagesInDir(dir: string): Promise<string[]> {
+//   return new Promise((resolve, reject) => {
+//     smbClient.readdir(dir, (err, files) => {
+//       if (err) return reject(err);
+//       resolve(files.filter((f: string) => IMAGE_EXTS.test(f)));
+//     });
+//   });
+// }
 
-async function listImagesInDir(dir: string): Promise<string[]> {
-  return new Promise((resolve, reject) => {
-    smbClient.readdir(dir, (err, files) => {
-      if (err) return reject(err);
-      resolve(files.filter((f: string) => IMAGE_EXTS.test(f)));
-    });
-  });
+async function listImagesInDir(dir: string): Promise<{dir: string, files: string[]}> {
+  const now = new Date()
+  const currentMonthDir = `${dir}/${(now.getMonth() + 1).toString().padStart(2, '0')}`
+  const currentDateDir = `${currentMonthDir}-${now.getDate().toString().padStart(2, '0')}`
+
+  console.log('currentDateDir', currentDateDir)
+  if (await smbClient.exists(currentDateDir)) {
+    const allFiles = (await smbClient.readdir(currentDateDir)).filter(x => IMAGE_EXTS.test(x))
+    console.log('current date files', allFiles)
+    return {dir: currentDateDir, files: allFiles}
+  } else if (await smbClient.exists(currentMonthDir)) {
+    const allFiles = (await smbClient.readdir(currentMonthDir)).filter(x => IMAGE_EXTS.test(x))
+    console.log('current month', allFiles)
+    return {dir: currentMonthDir, files: allFiles}
+  }
+
+  const allFiles = (await smbClient.readdir(dir)).filter(x => IMAGE_EXTS.test(x))
+  console.log('non specific files', allFiles)
+  return {dir, files: allFiles}
 }
 
 function pickRandom<T>(arr: T[]): T {
