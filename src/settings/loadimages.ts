@@ -17,7 +17,7 @@ const defaultRemoteSettings: RemoteSettings = {
 let smbClient: SMB2;
 const IMAGE_EXTS = /\.(jpe?g|png|gif|bmp|webp)$/i;
 
-export async function loadSmbImage() {
+export async function loadSmbImage(currentFileName?: string) {
   // Init SMB client with current settings
   await initSmb();
 
@@ -33,7 +33,20 @@ export async function loadSmbImage() {
     console.log(`${files.length} files found`);
   }
 
-  const chosen = pickRandom(files);
+  // Filter out current file to avoid showing the same image twice
+  let availableFiles = files;
+  if (currentFileName && files.length > 1) {
+    availableFiles = files.filter(file => file !== currentFileName);
+    console.log(`Filtered out current file '${currentFileName}', ${availableFiles.length} files available`);
+  }
+  
+  // If all files were filtered out (shouldn't happen but safety check)
+  if (availableFiles.length === 0) {
+    availableFiles = files;
+    console.warn('All files filtered out, using original list');
+  }
+
+  const chosen = pickRandom(availableFiles);
   console.log("Loading file: ", chosen);
   const data64 = await readImageAsBase64(dir, chosen);
 

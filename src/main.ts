@@ -122,7 +122,9 @@ async function loadNextImage() {
 
   console.log(`Refreshing image...`);
   try {
-    const imageData = await loadSmbImage();
+    // Pass current filename to avoid loading the same image twice
+    const currentFileName = cachedImageData?.fileName;
+    const imageData = await loadSmbImage(currentFileName);
     console.log('Random image loaded from SMB');
     if (imageData) {
       // Cache the image data

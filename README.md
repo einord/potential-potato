@@ -99,6 +99,13 @@ The application includes intelligent image caching:
 - **Seamless transitions** between cached and new images
 - **Perfect for slow network connections** to SMB shares
 
+### Smart Image Rotation
+The application ensures variety in image display:
+- **No duplicate images** - never shows the same image twice in a row
+- **Intelligent filtering** - current image is excluded from random selection
+- **Robust handling** - gracefully handles edge cases (single image, etc.)
+- **Filename-based tracking** - uses filename to identify current image
+
 ## Architecture
 
 - **Main Process**: `src/main.ts` - Electron main process with image caching
