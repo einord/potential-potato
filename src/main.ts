@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, ipcMain } from 'electron'
 import path from 'node:path'
 import started from 'electron-squirrel-startup'
 import { currentSmbSettings, ensureSmbSettingsFile, loadSmbSettings, smbSettingsFile } from './settings' // Ensure settings are initialized
@@ -16,6 +16,7 @@ if (started) {
 let mainWindow : BrowserWindow | undefined = undefined
 let timeout = 10
 let appUpdater: AppUpdater | undefined = undefined
+let cachedImageData: { dataUrl: string; settings: any; fileName: string } | undefined = undefined
 
 const createWindow = async () => {
   // Create the browser window.
@@ -57,6 +58,12 @@ const createWindow = async () => {
     }
   })
 };
+
+// IPC handlers
+ipcMain.handle('get-cached-image', () => {
+  console.log('Cached image requested, returning:', cachedImageData ? 'cached data' : 'no cache');
+  return cachedImageData;
+});
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
@@ -118,6 +125,9 @@ async function loadNextImage() {
     const imageData = await loadSmbImage();
     console.log('Random image loaded from SMB');
     if (imageData) {
+      // Cache the image data
+      cachedImageData = imageData;
+      
       // Send the image data to the renderer process
       mainWindow.webContents.send('new-image', imageData);
     }

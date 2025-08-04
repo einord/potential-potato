@@ -33,6 +33,9 @@ contextBridge.exposeInMainWorld('api', {
     return () => ipcRenderer.removeListener('new-image', wrapper);
   },
   
+  // Cached image API
+  getCachedImage: () => ipcRenderer.invoke('get-cached-image'),
+  
   // Auto-updater API
   updater: {
     onUpdateAvailable: (callback: (info: UpdateInfo) => void) => {

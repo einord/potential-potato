@@ -6,6 +6,7 @@ declare global {
   interface Window {
     api: {
       onNewImage(callback: (payload: { dataUrl: string; settings: RemoteSettings }) => void): () => void;
+      getCachedImage(): Promise<{ dataUrl: string; settings: RemoteSettings; fileName: string } | null>;
       updater: {
         onUpdateAvailable(callback: (info: any) => void): () => void;
         onUpdateNotAvailable(callback: (info: any) => void): () => void;

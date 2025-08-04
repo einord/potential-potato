@@ -90,9 +90,18 @@ To enable auto-updates, you need to:
 5. On Raspberry Pi, the .deb package is seamlessly installed
 6. Perfect for headless Raspberry Pi installations!
 
+## Features
+
+### Image Caching
+The application includes intelligent image caching:
+- **In-memory cache** of the last loaded image
+- **Instant display** when app starts (no waiting for first SMB load)
+- **Seamless transitions** between cached and new images
+- **Perfect for slow network connections** to SMB shares
+
 ## Architecture
 
-- **Main Process**: `src/main.ts` - Electron main process
+- **Main Process**: `src/main.ts` - Electron main process with image caching
 - **Preload**: `src/preload.ts` - Secure bridge between main and renderer
 - **Renderer**: `src/renderer.ts` - Frontend application
 - **Updater**: `src/updater/index.ts` - Auto-update functionality
