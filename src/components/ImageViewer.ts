@@ -3,7 +3,7 @@ import css from "./ImageViewer.css?inline";
 export class ImageViewer extends HTMLElement {
   static sheet = new CSSStyleSheet();
 
-  private currentData: string = 'https://wallpapercave.com/wp/9gAmpUH.jpg'
+  private currentData = 'https://wallpapercave.com/wp/9gAmpUH.jpg'
 
   constructor() {
     super();
@@ -31,7 +31,7 @@ export class ImageViewer extends HTMLElement {
 
     // Listen for the next image event
     window.addEventListener("DOMContentLoaded", () => {
-      window.api.onNewImage(({ dataUrl, settings, fileName }) => {
+      window.api.onNewImage(({ dataUrl, settings }) => {
         this.currentData = dataUrl
         image.style.background = `url("${dataUrl}")`
         image.style.backgroundSize = "cover"

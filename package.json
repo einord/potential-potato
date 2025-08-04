@@ -8,6 +8,11 @@
     "start": "electron-forge start",
     "package": "electron-forge package",
     "make": "electron-forge make",
+    "make:macos": "electron-forge make --platform=darwin",
+    "make:windows": "electron-forge make --platform=win32",
+    "make:linux": "electron-forge make --platform=linux --arch=x64",
+    "make:rpi": "electron-forge make --arch=arm64 --platform=linux",
+    "make:rpi-legacy": "electron-forge make --arch=armv7l --platform=linux",
     "publish": "electron-forge publish",
     "lint": "eslint --ext .ts,.tsx ."
   },
@@ -33,6 +38,7 @@
     "@typescript-eslint/parser": "^5.62.0",
     "electron": "37.2.5",
     "eslint": "^8.57.1",
+    "eslint-import-resolver-typescript": "^4.4.4",
     "eslint-plugin-import": "^2.32.0",
     "typescript": "~4.5.4",
     "vite": "^5.4.19"

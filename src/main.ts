@@ -2,7 +2,7 @@ import { app, BrowserWindow } from 'electron'
 import path from 'node:path'
 import started from 'electron-squirrel-startup'
 import { currentSmbSettings, ensureSmbSettingsFile, loadSmbSettings, smbSettingsFile } from './settings' // Ensure settings are initialized
-import chokidar from 'chokidar'
+import { watch } from 'chokidar'
 import { loadSmbImage, remoteSettings } from './settings/loadimages'
 
 let refreshTimer: NodeJS.Timeout | string | number | undefined
@@ -13,7 +13,7 @@ if (started) {
 }
 
 let mainWindow : BrowserWindow | undefined = undefined
-let timeout: number = 10
+let timeout = 10
 
 const createWindow = async () => {
   // Create the browser window.
@@ -75,7 +75,7 @@ app.on('activate', () => {
 
 // Watch for changes in the settings file
 function watchSmbSettingsFile(mainWindow: BrowserWindow) {
-  const watcher = chokidar.watch(smbSettingsFile, { ignoreInitial: true });
+  const watcher = watch(smbSettingsFile, { ignoreInitial: true });
   watcher.on('change', async () => {
       console.log(`SMB settings file changed: ${smbSettingsFile}. Reloading SMB settings...`);
       await loadSmbSettings();

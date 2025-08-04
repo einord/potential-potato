@@ -1,0 +1,166 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          # macOS builds
+          - os: macos-latest
+            platform: darwin
+            arch: x64
+            name: macOS Intel
+            script: make:macos
+            
+          - os: macos-latest
+            platform: darwin
+            arch: arm64
+            name: macOS Apple Silicon
+            script: make:macos
+            
+          # Windows builds
+          - os: windows-latest
+            platform: win32
+            arch: x64
+            name: Windows x64
+            script: make:windows
+            
+          # Linux builds
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+            name: Linux x64
+            script: make:linux
+            
+          # Raspberry Pi builds
+          - os: ubuntu-latest
+            platform: linux
+            arch: arm64
+            name: Raspberry Pi (ARM64)
+            script: make:rpi
+            
+          - os: ubuntu-latest
+            platform: linux
+            arch: armv7l
+            name: Raspberry Pi Legacy (ARM32)
+            script: make:rpi-legacy
+
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install pnpm
+      uses: pnpm/action-setup@v2
+      with:
+        version: latest
+
+    - name: Get pnpm store directory
+      shell: bash
+      run: |
+        echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+    - name: Setup pnpm cache
+      uses: actions/cache@v3
+      with:
+        path: ${{ env.STORE_PATH }}
+        key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+        restore-keys: |
+          ${{ runner.os }}-pnpm-store-
+
+    - name: Install dependencies
+      run: pnpm install
+
+    - name: Install Linux build dependencies
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y dpkg fakeroot rpm
+
+    - name: Lint code
+      run: pnpm run lint
+
+    - name: Build application
+      run: pnpm run ${{ matrix.script }}
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.name }}-${{ matrix.arch }}
+        path: |
+          out/make/**/*
+        retention-days: 30
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Display structure of downloaded files
+      run: ls -la artifacts/
+
+    - name: Create release tag
+      id: tag
+      run: |
+        TAG_NAME="v$(date +'%Y%m%d-%H%M%S')"
+        echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+        echo "Creating release with tag: $TAG_NAME"
+
+    - name: Prepare release assets
+      run: |
+        mkdir -p release-assets
+        find artifacts -name "*.deb" -exec cp {} release-assets/ \;
+        find artifacts -name "*.rpm" -exec cp {} release-assets/ \;
+        find artifacts -name "*.zip" -exec cp {} release-assets/ \;
+        find artifacts -name "*.exe" -exec cp {} release-assets/ \;
+        find artifacts -name "*Setup.exe" -exec cp {} release-assets/ \;
+        ls -la release-assets/
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.tag.outputs.tag_name }}
+        name: Release ${{ steps.tag.outputs.tag_name }}
+        body: |
+          ## Automatic Release
+          
+          This release was automatically generated from the latest main branch.
+          
+          ### Supported Platforms:
+          - **macOS**: `.zip` files for Intel and Apple Silicon
+          - **Windows**: `.exe` installer
+          - **Linux x64**: `.deb` and `.rpm` packages  
+          - **Raspberry Pi OS**: `.deb` packages for ARM64 and ARM32
+          
+          ### Installation:
+          - **macOS**: Download and extract the `.zip` file
+          - **Windows**: Run the `.exe` installer
+          - **Ubuntu/Debian**: `sudo dpkg -i potential-potato_*.deb`
+          - **CentOS/RHEL/Fedora**: `sudo rpm -i potential-potato_*.rpm`
+          - **Raspberry Pi**: `sudo dpkg -i potential-potato_*_arm64.deb`
+        files: release-assets/*
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
