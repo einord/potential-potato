@@ -12,4 +12,38 @@ contextBridge.exposeInMainWorld('api', {
     // returnera en funktion för att sluta lyssna om du vill:
     return () => ipcRenderer.removeListener('new-image', wrapper);
   },
+  
+  // Auto-updater API
+  updater: {
+    onUpdateAvailable: (callback: (info: any) => void) => {
+      const wrapper = (_event: IpcRendererEvent, info: any) => callback(info);
+      ipcRenderer.on('update-available', wrapper);
+      return () => ipcRenderer.removeListener('update-available', wrapper);
+    },
+    onUpdateNotAvailable: (callback: (info: any) => void) => {
+      const wrapper = (_event: IpcRendererEvent, info: any) => callback(info);
+      ipcRenderer.on('update-not-available', wrapper);
+      return () => ipcRenderer.removeListener('update-not-available', wrapper);
+    },
+    onUpdateDownloaded: (callback: (info: any) => void) => {
+      const wrapper = (_event: IpcRendererEvent, info: any) => callback(info);
+      ipcRenderer.on('update-downloaded', wrapper);
+      return () => ipcRenderer.removeListener('update-downloaded', wrapper);
+    },
+    onUpdateError: (callback: (error: string) => void) => {
+      const wrapper = (_event: IpcRendererEvent, error: string) => callback(error);
+      ipcRenderer.on('update-error', wrapper);
+      return () => ipcRenderer.removeListener('update-error', wrapper);
+    },
+    onDownloadProgress: (callback: (progress: any) => void) => {
+      const wrapper = (_event: IpcRendererEvent, progress: any) => callback(progress);
+      ipcRenderer.on('update-download-progress', wrapper);
+      return () => ipcRenderer.removeListener('update-download-progress', wrapper);
+    },
+    onUpdateChecking: (callback: () => void) => {
+      const wrapper = () => callback();
+      ipcRenderer.on('update-checking', wrapper);
+      return () => ipcRenderer.removeListener('update-checking', wrapper);
+    }
+  }
 });

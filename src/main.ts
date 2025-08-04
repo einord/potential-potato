@@ -4,6 +4,7 @@ import started from 'electron-squirrel-startup'
 import { currentSmbSettings, ensureSmbSettingsFile, loadSmbSettings, smbSettingsFile } from './settings' // Ensure settings are initialized
 import { watch } from 'chokidar'
 import { loadSmbImage, remoteSettings } from './settings/loadimages'
+import { AppUpdater } from './updater'
 
 let refreshTimer: NodeJS.Timeout | string | number | undefined
 
@@ -14,6 +15,7 @@ if (started) {
 
 let mainWindow : BrowserWindow | undefined = undefined
 let timeout = 10
+let appUpdater: AppUpdater | undefined = undefined
 
 const createWindow = async () => {
   // Create the browser window.
@@ -48,6 +50,11 @@ const createWindow = async () => {
 
   mainWindow.webContents.on('did-finish-load', () => {
     mainWindow?.webContents.send('smb-settings-updated', currentSmbSettings)
+    
+    // Initialize auto-updater (only in production)
+    if (!MAIN_WINDOW_VITE_DEV_SERVER_URL && mainWindow) {
+      appUpdater = new AppUpdater(mainWindow);
+    }
   })
 };
 
@@ -60,6 +67,12 @@ app.on('ready', createWindow);
 // for applications and their menu bar to stay active until the user quits
 // explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
+  // Cleanup updater
+  if (appUpdater) {
+    appUpdater.dispose();
+    appUpdater = undefined;
+  }
+  
   if (process.platform !== 'darwin') {
     app.quit();
   }
