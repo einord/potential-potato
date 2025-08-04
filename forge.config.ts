@@ -15,7 +15,24 @@ const config: ForgeConfig = {
   makers: [
     new MakerSquirrel({}, ['win32']), 
     new MakerZIP({}, ['darwin']), 
-    new MakerDeb({}, ['linux']),
+    new MakerDeb({
+      options: {
+        maintainer: 'Jonatan Nyqvist <jonte@plik.se>',
+        homepage: 'https://github.com/einord/potential-potato',
+        description: 'Cross-platform image viewer for SMB shares',
+        depends: [
+          'libgtk-3-0',
+          'libnotify4', 
+          'libnss3',
+          'libatspi2.0-0',
+          'libdrm2',
+          'libgbm1',
+          'libxcb-dri3-0',
+          'libasound2',
+          'libxss1'
+        ]
+      }
+    }, ['linux']),
     new MakerRpm({}, ['linux'])
   ],
   plugins: [
