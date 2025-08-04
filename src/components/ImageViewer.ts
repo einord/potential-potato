@@ -35,6 +35,9 @@ export class ImageViewer extends HTMLElement {
     });
   }
 
+  /**
+   * Initializes the basic elements in this shadow element
+   */
   private initElements() {
     // Create the image viewer element
     this.wrapper = document.createElement("div");
