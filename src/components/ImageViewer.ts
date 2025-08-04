@@ -1,3 +1,4 @@
+import { RemoteSettings } from "src/settings/loadimages";
 import css from "./ImageViewer.css?inline";
 
 export class ImageViewer extends HTMLElement {
@@ -5,63 +6,91 @@ export class ImageViewer extends HTMLElement {
 
   private currentData = 'https://wallpapercave.com/wp/9gAmpUH.jpg'
 
+  private shadow: ShadowRoot
+  private wrapper: HTMLDivElement
+  private image: HTMLDivElement
+
   constructor() {
     super();
-    const shadow = this.attachShadow({ mode: "open" });
+    this.shadow = this.attachShadow({ mode: "open" });
 
     // Load the CSS style
     if (!ImageViewer.sheet.cssRules.length) {
       ImageViewer.sheet.replaceSync(css);
     }
-    shadow.adoptedStyleSheets = [ImageViewer.sheet];
+    this.shadow.adoptedStyleSheets = [ImageViewer.sheet];
 
-    // Create the image viewer element
-    const wrapper = document.createElement("div");
-    wrapper.id = 'image-background'
-    wrapper.setAttribute("class", "image-background");
-    
-    const image = document.createElement('div');
-    image.id = 'image'
-    image.setAttribute('class', 'image')
-    image.style.background = `url("${this.currentData}")`
-    image.style.backgroundSize = "cover"
-    image.style.backgroundPosition = "center"
-    image.style.backgroundRepeat = "no-repeat"
-    wrapper.appendChild(image)
+    // Init the elements
+    this.initElements()
+
+    // Try to load cached image first
+    this.loadCachedImage();
 
     // Listen for the next image event
     window.addEventListener("DOMContentLoaded", () => {
       window.api.onNewImage(({ dataUrl, settings }) => {
         this.currentData = dataUrl
-        image.style.background = `url("${dataUrl}")`
-        image.style.backgroundSize = "cover"
-        image.style.backgroundPosition = "center"
-        image.style.backgroundRepeat = "no-repeat"
-
-        // Passepartout
-        if (settings.passepartoutColor == null || settings.passepartoutColor === 'off') {
-          wrapper.style.backgroundColor = 'green'
-          image.style.border = 'none'
-          image.style.marginLeft = '0'
-          image.style.marginTop = '0'
-          image.style.width = '100%'
-          image.style.height = '100%'
-        } else {
-          wrapper.style.backgroundColor = settings.passepartoutColor
-          image.style.outline = '10px solid hsla(0, 100%, 0%, 0.2)'
-          
-          const passepartoutWidth = settings.passepartoutWidth ?? 150
-          if (passepartoutWidth) {
-            image.style.marginLeft = passepartoutWidth + "px"
-            image.style.marginTop = passepartoutWidth + "px"
-            image.style.width = `calc(100% - ${passepartoutWidth}px - ${passepartoutWidth}px)`
-            image.style.height = `calc(100% - ${passepartoutWidth}px - ${passepartoutWidth}px)`
-          }
-        }
+        this.showImage(settings)
       });
     });
+  }
 
-    shadow.appendChild(wrapper);
+  private initElements() {
+    // Create the image viewer element
+    this.wrapper = document.createElement("div");
+    this.wrapper.id = 'image-background'
+    this.wrapper.setAttribute("class", "image-background");
+    
+    this.image = document.createElement('div');
+    this.image.id = 'image'
+    this.image.setAttribute('class', 'image')
+    this.image.style.background = `url("${this.currentData}")`
+    this.image.style.backgroundSize = "cover"
+    this.image.style.backgroundPosition = "center"
+    this.image.style.backgroundRepeat = "no-repeat"
+    this.wrapper.appendChild(this.image)
+
+    this.shadow.appendChild(this.wrapper);
+  }
+
+  private async loadCachedImage(): Promise<void> {
+    try {
+      const cachedImage = await window.api.getCachedImage();
+      if (cachedImage) {
+        this.currentData = cachedImage.dataUrl;
+        this.showImage(cachedImage.settings);
+      }
+    } catch (error) {
+      console.error('Failed to load cached image:', error);
+    }
+  }
+
+  private showImage(settings: RemoteSettings) {
+    this.image.style.background = `url("${this.currentData}")`
+    this.image.style.backgroundSize = "cover"
+    this.image.style.backgroundPosition = "center"
+    this.image.style.backgroundRepeat = "no-repeat"
+
+    // Passepartout
+    if (settings.passepartoutColor == null || settings.passepartoutColor === 'off') {
+      this.wrapper.style.backgroundColor = 'green'
+      this.image.style.border = 'none'
+      this.image.style.marginLeft = '0'
+      this.image.style.marginTop = '0'
+      this.image.style.width = '100%'
+      this.image.style.height = '100%'
+    } else {
+      this.wrapper.style.backgroundColor = settings.passepartoutColor
+      this.image.style.outline = '10px solid hsla(0, 100%, 0%, 0.2)'
+      
+      const passepartoutWidth = settings.passepartoutWidth ?? 150
+      if (passepartoutWidth) {
+        this.image.style.marginLeft = passepartoutWidth + "px"
+        this.image.style.marginTop = passepartoutWidth + "px"
+        this.image.style.width = `calc(100% - ${passepartoutWidth}px - ${passepartoutWidth}px)`
+        this.image.style.height = `calc(100% - ${passepartoutWidth}px - ${passepartoutWidth}px)`
+      }
+    }
   }
 }
 
