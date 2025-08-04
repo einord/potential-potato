@@ -2,6 +2,9 @@ import { autoUpdater } from 'electron-updater';
 import { BrowserWindow } from 'electron';
 import log from 'electron-log';
 
+// Update check interval in milliseconds (default: 1 hour)
+const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
+
 // Configure logging
 log.transports.file.level = 'info';
 autoUpdater.logger = log;
@@ -28,7 +31,7 @@ export class AppUpdater {
     autoUpdater.checkForUpdatesAndNotify();
     this.updateCheckInterval = setInterval(() => {
       autoUpdater.checkForUpdatesAndNotify();
-    }, 60 * 60 * 1000); // 1 hour
+    }, UPDATE_CHECK_INTERVAL_MS);
 
     // Event handlers
     autoUpdater.on('checking-for-update', () => {

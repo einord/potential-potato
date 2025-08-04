@@ -1,3 +1,5 @@
+import log from 'electron-log';
+
 export class UpdateNotification extends HTMLElement {
   private notification: HTMLDivElement;
   private progressBar: HTMLDivElement;
@@ -66,7 +68,7 @@ export class UpdateNotification extends HTMLElement {
     if (typeof window !== 'undefined' && window.api?.updater) {
       // Update checking
       window.api.updater.onUpdateChecking(() => {
-        console.debug('Checking for updates...');
+        log.debug('Checking for updates...');
         // this.showNotification('Checking for updates...', false);
         // setTimeout(() => this.hideNotification(), 3000);
       });
@@ -78,7 +80,7 @@ export class UpdateNotification extends HTMLElement {
 
       // Update not available
       window.api.updater.onUpdateNotAvailable(() => {
-        console.debug('You have the latest version!');
+        log.debug('You have the latest version!');
         // this.showNotification('You have the latest version!', false);
         // setTimeout(() => this.hideNotification(), 3000);
       });
