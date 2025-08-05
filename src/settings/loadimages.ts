@@ -7,6 +7,7 @@ export interface RemoteSettings {
     refreshRate: number,
     passepartoutColor?: string,
     passepartoutWidth?: number,
+    transitionDuration?: number, // in milliseconds, 0 = no transition
 }
 
 export let remoteSettings: RemoteSettings | undefined = undefined
