@@ -4,7 +4,7 @@ import started from 'electron-squirrel-startup'
 import { currentSmbSettings, ensureSmbSettingsFile, loadSmbSettings, smbSettingsFile } from './settings' // Ensure settings are initialized
 import { watch } from 'chokidar'
 import { loadSmbImage, remoteSettings } from './settings/loadimages'
-import { AppUpdater } from './updater'
+import { UniversalUpdater } from './updater/universal-updater'
 
 let refreshTimer: NodeJS.Timeout | string | number | undefined
 
@@ -15,7 +15,7 @@ if (started) {
 
 let mainWindow : BrowserWindow | undefined = undefined
 let timeout = 10
-let appUpdater: AppUpdater | undefined = undefined
+let appUpdater: UniversalUpdater | undefined = undefined
 let cachedImageData: { dataUrl: string; settings: any; fileName: string } | undefined = undefined
 
 const createWindow = async () => {
@@ -54,7 +54,8 @@ const createWindow = async () => {
     
     // Initialize auto-updater (only in production)
     if (!MAIN_WINDOW_VITE_DEV_SERVER_URL && mainWindow) {
-      appUpdater = new AppUpdater(mainWindow);
+      const currentVersion = app.getVersion();
+      appUpdater = new UniversalUpdater(mainWindow, currentVersion, 'einord', 'potential-potato');
     }
   })
 };

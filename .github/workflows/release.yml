@@ -140,6 +140,8 @@ jobs:
         find artifacts -name "*.zip" -exec cp {} release-assets/ \;
         find artifacts -name "*.exe" -exec cp {} release-assets/ \;
         find artifacts -name "*Setup.exe" -exec cp {} release-assets/ \;
+        find artifacts -name "*.yml" -exec cp {} release-assets/ \;
+        find artifacts -name "*.yaml" -exec cp {} release-assets/ \;
         ls -la release-assets/
 
     - name: Create GitHub Release
