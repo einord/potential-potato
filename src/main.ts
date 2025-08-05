@@ -5,6 +5,7 @@ import { currentSmbSettings, ensureSmbSettingsFile, loadSmbSettings, smbSettings
 import { watch } from 'chokidar'
 import { loadSmbImage, remoteSettings } from './settings/loadimages'
 import { AppUpdater } from './updater'
+import { DebUpdater } from './updater/deb-updater'
 
 let refreshTimer: NodeJS.Timeout | string | number | undefined
 
@@ -15,7 +16,7 @@ if (started) {
 
 let mainWindow : BrowserWindow | undefined = undefined
 let timeout = 10
-let appUpdater: AppUpdater | undefined = undefined
+let appUpdater: AppUpdater | DebUpdater | undefined = undefined
 let cachedImageData: { dataUrl: string; settings: any; fileName: string } | undefined = undefined
 
 const createWindow = async () => {
@@ -54,7 +55,14 @@ const createWindow = async () => {
     
     // Initialize auto-updater (only in production)
     if (!MAIN_WINDOW_VITE_DEV_SERVER_URL && mainWindow) {
-      appUpdater = new AppUpdater(mainWindow);
+      if (process.platform === 'linux') {
+        // Use custom DEB updater for Linux
+        const currentVersion = app.getVersion();
+        appUpdater = new DebUpdater(mainWindow, currentVersion, 'einord', 'potential-potato');
+      } else {
+        // Use standard electron-updater for other platforms
+        appUpdater = new AppUpdater(mainWindow);
+      }
     }
   })
 };

@@ -70,6 +70,7 @@ The application includes fully automatic update functionality that:
 - **Automatically restarts** when update is ready (perfect for headless operation)
 - **Works on all platforms** including Raspberry Pi OS
 - **Designed for unattended operation** - no keyboard/mouse required
+- **Smart platform detection** - uses native DEB installer on Linux, standard electron-updater elsewhere
 
 ### Configuration
 
