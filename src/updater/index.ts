@@ -19,13 +19,19 @@ export class AppUpdater {
   }
 
   private setupUpdater(): void {
-    // Configure updater for GitHub releases
+    // Configure updater for GitHub releases with DEB support
     autoUpdater.setFeedURL({
       provider: 'github',
       owner: 'einord',
       repo: 'potential-potato',
-      private: false
+      private: false,
+      // Force check for updates even without AppImage
+      updaterCacheDirName: 'potential-potato-updater'
     });
+    
+    // Override platform detection for DEB packages
+    autoUpdater.autoDownload = true;
+    autoUpdater.autoInstallOnAppQuit = true;
 
     // Configure update check interval (check every hour)
     autoUpdater.checkForUpdatesAndNotify();
