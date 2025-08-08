@@ -94,9 +94,27 @@ function closeSmb() {
   }
 }
 
+/// <summary>
+/// Normalizes directory path for SMB operations, handling root directory cases
+/// </summary>
+function normalizeSmbPath(dir: string, fileName: string): string {
+  // Handle empty, root, or current directory cases
+  const normalizedDir = !dir || dir === '/' || dir === './' || dir === '.' ? '' : dir;
+  
+  if (!normalizedDir) {
+    return fileName;
+  }
+  
+  // Remove leading slash if present to avoid double slashes
+  const cleanDir = normalizedDir.startsWith('/') ? normalizedDir.slice(1) : normalizedDir;
+  return `${cleanDir}/${fileName}`;
+}
+
 export async function loadRemoteSettings(dir: string) {
   const settingsFileName = 'settings.json'
-  const settingsFile = await smbClient.readFile(`${dir}/${settingsFileName}`)
+  const settingsPath = normalizeSmbPath(dir, settingsFileName);
+  console.log(`Loading settings from SMB path: ${settingsPath}`);
+  const settingsFile = await smbClient.readFile(settingsPath)
   
   // Read settingsfile as text and parse it as JSON
   try {
@@ -110,8 +128,11 @@ export async function loadRemoteSettings(dir: string) {
 
 async function listImagesInDir(dir: string): Promise<{dir: string, files: string[]}> {
   const now = new Date()
-  const currentMonthDir = `${dir}/${(now.getMonth() + 1).toString().padStart(2, '0')}`
-  const currentDateDir = `${currentMonthDir}-${now.getDate().toString().padStart(2, '0')}`
+  const monthStr = (now.getMonth() + 1).toString().padStart(2, '0');
+  const dateStr = now.getDate().toString().padStart(2, '0');
+  
+  const currentMonthDir = normalizeSmbPath(dir, monthStr);
+  const currentDateDir = `${currentMonthDir}-${dateStr}`;
 
   console.log('currentDateDir', currentDateDir)
   if (await smbClient.exists(currentDateDir)) {
@@ -124,9 +145,11 @@ async function listImagesInDir(dir: string): Promise<{dir: string, files: string
     return {dir: currentMonthDir, files: allFiles}
   }
 
-  const allFiles = (await smbClient.readdir(dir)).filter(x => IMAGE_EXTS.test(x))
+  // For root directory, use empty string or the normalized directory
+  const rootDir = !dir || dir === '/' || dir === './' || dir === '.' ? '' : dir;
+  const allFiles = (await smbClient.readdir(rootDir)).filter(x => IMAGE_EXTS.test(x))
   console.log('non specific files', allFiles)
-  return {dir, files: allFiles}
+  return {dir: rootDir, files: allFiles}
 }
 
 function pickRandom<T>(arr: T[]): T {
@@ -138,7 +161,9 @@ async function readImageAsBase64(
   fileName: string
 ): Promise<string> {
   return new Promise((resolve, reject) => {
-    smbClient.readFile(`${dir}/${fileName}`, (err, data) => {
+    const filePath = normalizeSmbPath(dir, fileName);
+    console.log(`Reading image from SMB path: ${filePath}`);
+    smbClient.readFile(filePath, (err, data) => {
       if (err) return reject(err);
       resolve((data as unknown as Buffer).toString("base64"));
     });
