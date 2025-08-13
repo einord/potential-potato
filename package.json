@@ -16,8 +16,8 @@
     "publish": "electron-forge publish",
     "lint": "eslint --ext .ts,.tsx .",
     "build:all": "vite build --config vite.main.config.ts && vite build --config vite.preload.config.ts && vite build --config vite.renderer.config.ts",
-    "dist:linux": "pnpm run build:all && electron-builder --linux AppImage --armv7l --arm64",
-    "release:linux": "pnpm run build:all && electron-builder --linux AppImage --armv7l --arm64 --publish always"
+    "dist:linux": "pnpm run build:all && electron-builder --linux AppImage deb --armv7l --arm64",
+    "release:linux": "pnpm run build:all && electron-builder --linux AppImage deb --armv7l --arm64 --publish always"
   },
   "keywords": [],
   "author": {
@@ -76,7 +76,8 @@
     },
     "linux": {
       "target": [
-        { "target": "AppImage", "arch": ["armv7l", "arm64"] }
+        { "target": "AppImage", "arch": ["armv7l", "arm64"] },
+        { "target": "deb", "arch": ["armv7l", "arm64"] }
       ],
       "category": "Utility",
       "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
