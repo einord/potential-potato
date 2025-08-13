@@ -67,8 +67,20 @@ export class ImageViewer extends HTMLElement {
     this.versionLabel = document.createElement('div');
     this.versionLabel.id = 'version-label';
     this.versionLabel.setAttribute("class", "version-label");
-    this.versionLabel.textContent = 'Version: 1.0.0';
+    this.versionLabel.textContent = 'Version: …';
     this.wrapper.appendChild(this.versionLabel);
+
+    // Fetch and display actual app version
+    this.updateVersionLabel();
+  }
+
+  private async updateVersionLabel() {
+    try {
+      const version = await window.api.getAppVersion();
+      this.versionLabel.textContent = `Version: ${version}`;
+  } catch {
+      // Leave placeholder on failure
+    }
   }
   
   private createImageLayer(id: string): HTMLDivElement {

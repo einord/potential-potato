@@ -9,6 +9,15 @@
 				"$tsc"
 			],
 			"group": "build"
+		},
+		{
+			"label": "Start app to verify version label",
+			"type": "shell",
+			"command": "pnpm run start",
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
 		}
 	]
 }

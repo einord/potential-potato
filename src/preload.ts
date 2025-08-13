@@ -35,6 +35,9 @@ contextBridge.exposeInMainWorld('api', {
   
   // Cached image API
   getCachedImage: () => ipcRenderer.invoke('get-cached-image'),
+
+  // App info API
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   
   // Auto-updater API
   updater: {

@@ -79,6 +79,14 @@ ipcMain.handle('get-cached-image', () => {
   return cachedImageData;
 });
 
+ipcMain.handle('get-app-version', () => {
+  try {
+    return app.getVersion();
+  } catch {
+    return 'unknown';
+  }
+});
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.

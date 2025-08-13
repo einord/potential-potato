@@ -8,6 +8,7 @@ declare global {
     api: {
       onNewImage(callback: (payload: { dataUrl: string; settings: RemoteSettings }) => void): () => void;
       getCachedImage(): Promise<{ dataUrl: string; settings: RemoteSettings; fileName: string } | null>;
+  getAppVersion(): Promise<string>;
       updater: {
         onUpdateAvailable(callback: (info: UpdateInfo) => void): () => void;
         onUpdateNotAvailable(callback: (info: UpdateInfo) => void): () => void;
