@@ -6,6 +6,20 @@ import { watch } from 'chokidar'
 import { loadSmbImage, remoteSettings } from './settings/loadimages'
 import { UniversalUpdater } from './updater/universal-updater'
 
+// Resolve dev server URL in development; undefined in packaged builds
+function resolveDevServerUrl(): string | undefined {
+  // Provided by electron-forge vite plugin in dev as a global define
+  const forgeGlobal = (globalThis as unknown as { MAIN_WINDOW_VITE_DEV_SERVER_URL?: string });
+  if (typeof forgeGlobal?.MAIN_WINDOW_VITE_DEV_SERVER_URL === 'string' && forgeGlobal.MAIN_WINDOW_VITE_DEV_SERVER_URL.length > 0) {
+    return forgeGlobal.MAIN_WINDOW_VITE_DEV_SERVER_URL;
+  }
+  // Fallback to common env vars if available
+  return (process.env.MAIN_WINDOW_VITE_DEV_SERVER_URL
+    || process.env.VITE_DEV_SERVER_URL
+    || process.env.ELECTRON_RENDERER_URL) as string | undefined;
+}
+const DEV_SERVER_URL = resolveDevServerUrl();
+
 // Safe logger: prefer electron-log when available, otherwise fall back to console
 // Note: comments must be in English per project rules
 const log: { info: (...args: unknown[]) => void; warn: (...args: unknown[]) => void; error: (...args: unknown[]) => void; transports?: { file?: { level?: string } } } = {
@@ -21,6 +35,10 @@ let refreshTimer: NodeJS.Timeout | string | number | undefined
 if (started) {
   app.quit();
 }
+
+// On Raspberry Pi and many Linux SBCs, hardware acceleration can cause a white window.
+// Disable it early to force software rendering which is more stable on Pi 2B.
+try { app.disableHardwareAcceleration(); } catch { /* ignore */ }
 
 let mainWindow : BrowserWindow | undefined = undefined
 let timeout = 10
@@ -46,11 +64,15 @@ const createWindow = async () => {
   });
 
   // and load the index.html of the app.
-  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+  const urlToLoad = (!app.isPackaged && DEV_SERVER_URL) ? DEV_SERVER_URL : undefined;
+  if (urlToLoad) {
+    console.log('Loading dev server URL:', urlToLoad);
+    mainWindow.loadURL(urlToLoad);
   } else {
-    // Load from .vite/build/renderer in production where index.html is emitted
-    mainWindow.loadFile(path.join(__dirname, `../renderer/index.html`));
+    console.log('Dev server URL not found, loading packaged index.html');
+    // Load from build/renderer in production where index.html is emitted
+    const prodIndex = path.join(__dirname, 'renderer/index.html');
+    mainWindow.loadFile(prodIndex);
   }
 
   // Open the DevTools.
@@ -68,7 +90,7 @@ const createWindow = async () => {
     mainWindow?.webContents.send('smb-settings-updated', currentSmbSettings)
     
   // Initialize auto-updater (only in production)
-  if (!MAIN_WINDOW_VITE_DEV_SERVER_URL && mainWindow) {
+  if (app.isPackaged && mainWindow) {
       const currentVersion = app.getVersion();
       // Prefer electron-updater only for Linux AppImage builds
       if (process.platform === 'linux' && process.env.APPIMAGE) {
@@ -202,7 +224,7 @@ async function setupElectronUpdater() {
 
   // Configure logger to use electron-log if desired
   autoUpdater.logger = log;
-  try { log.transports.file.level = 'info'; } catch { /* ignore logger setup errors */ }
+  try { log.transports!.file!.level = 'info'; } catch { /* ignore logger setup errors */ }
 
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;

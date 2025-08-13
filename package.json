@@ -1,95 +1,69 @@
 {
   "name": "potential-potato",
-  "productName": "potential-potato",
-  "version": "0.0.0",
-  "description": "My Electron application description",
-  "main": ".vite/build/main.js",
-  "scripts": {
-    "start": "electron-forge start",
-    "package": "electron-forge package",
-    "make": "electron-forge make",
-    "make:macos": "electron-forge make --platform=darwin",
-    "make:windows": "electron-forge make --platform=win32",
-    "make:linux": "electron-forge make --platform=linux --arch=x64",
-    "make:rpi": "electron-forge make --arch=arm64 --platform=linux",
-    "make:rpi-legacy": "electron-forge make --arch=armv7l --platform=linux",
-    "publish": "electron-forge publish",
-    "lint": "eslint --ext .ts,.tsx .",
-    "build:all": "vite build --config vite.main.config.ts && vite build --config vite.preload.config.ts && vite build --config vite.renderer.config.ts",
-    "dist:linux": "pnpm run build:all && electron-builder --linux AppImage deb --armv7l --arm64",
-    "release:linux": "pnpm run build:all && electron-builder --linux AppImage deb --armv7l --arm64 --publish always"
-  },
-  "keywords": [],
-  "author": {
-    "name": "Jonatan Nyqvist",
-    "email": "jonte@plik.se"
-  },
+  "version": "0.1.0",
+  "description": "Electron + Vue + Vite app that runs on macOS and Raspberry Pi (armv7l/arm64)",
+  "private": true,
+  "main": "dist-electron/main/index.js",
+  "author": "",
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/einord/potential-potato.git"
-  },
-  "homepage": "https://github.com/einord/potential-potato",
-  "devDependencies": {
-    "@electron-forge/cli": "^7.8.2",
-    "@electron-forge/maker-deb": "^7.8.2",
-    "@electron-forge/maker-rpm": "^7.8.2",
-    "@electron-forge/maker-squirrel": "^7.8.2",
-    "@electron-forge/maker-zip": "^7.8.2",
-    "@electron-forge/plugin-auto-unpack-natives": "^7.8.2",
-    "@electron-forge/plugin-fuses": "^7.8.2",
-    "@electron-forge/plugin-vite": "^7.8.2",
-    "@electron/fuses": "^2.0.0",
-    "@types/electron-squirrel-startup": "^1.0.2",
-    "@types/smb2": "^0.2.4",
-  "@typescript-eslint/eslint-plugin": "^8.6.0",
-  "@typescript-eslint/parser": "^8.6.0",
-    "electron": "37.2.5",
-    "electron-builder": "^24.13.3",
-    "eslint": "^8.57.1",
-    "eslint-import-resolver-typescript": "^4.4.4",
-    "eslint-plugin-import": "^2.32.0",
-    "typescript": "^5.4.5",
-    "@types/node": "^20.11.30",
-    "vite": "^5.4.19"
+  "scripts": {
+  "dev": "vite",
+  "start": "electron .",
+    "typecheck": "vue-tsc --noEmit",
+    "build": "vite build",
+    "dist": "npm run build && electron-builder",
+  "dist:mac": "npm run build && electron-builder --mac",
+  "dist:linux:arm64": "npm run build && electron-builder --linux AppImage deb --arm64",
+  "dist:linux:armv7l": "npm run build && electron-builder --linux AppImage deb --armv7l",
+  "dist:linux:dir:arm64": "npm run build && electron-builder --linux dir --arm64",
+  "dist:linux:dir:armv7l": "npm run build && electron-builder --linux dir --armv7l",
+    "clean": "rimraf dist dist-electron"
   },
   "dependencies": {
-    "chokidar": "^4.0.3",
-    "electron-log": "^5.4.2",
-    "electron-squirrel-startup": "^1.0.1",
-    "electron-updater": "^6.1.7",
-    "v9u-smb2": "^1.0.6"
+    "vue": "^3.5.10"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.12",
+    "@vitejs/plugin-vue": "^5.1.2",
+    "electron": "^28.3.3",
+    "electron-builder": "^24.13.3",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.2",
+    "vite-plugin-electron": "^0.28.2",
+    "vite-plugin-electron-renderer": "^0.14.5",
+    "vue-tsc": "^2.1.6"
   },
   "build": {
-    "appId": "se.plik.potentialpotato",
-    "productName": "potential-potato",
+    "appId": "com.example.potentialpotato",
+    "productName": "Potential Potato",
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "package.json"
+    ],
     "directories": {
-      "output": "dist_electron"
+      "buildResources": "build-resources"
     },
-      "files": [
-        "package.json",
-        "node_modules/**",
-        ".vite/build/**"
-      ],
-    "extraMetadata": {
-      "main": ".vite/build/main.js"
+    "mac": {
+      "category": "public.app-category.utilities",
+      "target": [
+        "dmg",
+        "zip"
+      ]
     },
     "linux": {
       "target": [
-        { "target": "AppImage", "arch": ["armv7l", "arm64"] },
-        { "target": "deb", "arch": ["armv7l", "arm64"] }
+        "AppImage",
+        "deb"
       ],
       "category": "Utility",
       "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
     },
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "einord",
-        "repo": "potential-potato",
-        "releaseType": "release"
-      }
-    ]
+    "asar": true,
+    "npmRebuild": true
+  },
+  "engines": {
+    "node": ">=18"
   }
-  
 }
