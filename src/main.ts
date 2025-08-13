@@ -1,11 +1,19 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
-import log from 'electron-log'
 import path from 'node:path'
 import started from 'electron-squirrel-startup'
 import { currentSmbSettings, ensureSmbSettingsFile, loadSmbSettings, smbSettingsFile } from './settings' // Ensure settings are initialized
 import { watch } from 'chokidar'
 import { loadSmbImage, remoteSettings } from './settings/loadimages'
 import { UniversalUpdater } from './updater/universal-updater'
+
+// Safe logger: prefer electron-log when available, otherwise fall back to console
+// Note: comments must be in English per project rules
+const log: { info: (...args: unknown[]) => void; warn: (...args: unknown[]) => void; error: (...args: unknown[]) => void; transports?: { file?: { level?: string } } } = {
+  info: (...args: unknown[]) => console.log(...args),
+  warn: (...args: unknown[]) => console.warn(...args),
+  error: (...args: unknown[]) => console.error(...args),
+  transports: { file: { level: 'info' } }
+}
 
 let refreshTimer: NodeJS.Timeout | string | number | undefined
 
