@@ -59,8 +59,8 @@
     "linux": {
       "target": [
         "AppImage",
-  "deb",
-  "rpm"
+        "deb",
+        "rpm"
       ],
       "category": "Utility",
       "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
