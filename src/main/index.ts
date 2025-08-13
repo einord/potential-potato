@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, Menu } from 'electron'
 import { join } from 'node:path'
 import { Updater } from './updater'
 
@@ -17,6 +17,23 @@ async function createWindow() {
 
   // Initialize updater once the window exists
   updater = new Updater(win, app.getVersion())
+
+  // Create application menu with a manual update check item
+  const template = [
+    {
+      label: 'Potential Potato',
+      submenu: [
+        {
+          label: 'Sök efter uppdatering nu',
+          click: () => updater?.checkNow()
+        },
+        { type: 'separator' },
+        { role: 'quit', label: 'Avsluta' }
+      ]
+    }
+  ] as Electron.MenuItemConstructorOptions[]
+  const menu = Menu.buildFromTemplate(template)
+  Menu.setApplicationMenu(menu)
 
   if (process.env.VITE_DEV_SERVER_URL) {
     await win.loadURL(process.env.VITE_DEV_SERVER_URL)

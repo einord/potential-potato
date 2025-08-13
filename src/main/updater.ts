@@ -20,6 +20,13 @@ export class Updater {
   private owner: string | null
   private repo: string | null
 
+  // Linux AppImage management
+  private readonly LINUX_APP_DIR = path.join(os.homedir(), 'Applications')
+  private readonly LINUX_BIN_LINK = path.join(os.homedir(), '.local', 'bin', 'potential-potato')
+  private readonly LINUX_AUTOSTART_DIR = path.join(os.homedir(), '.config', 'autostart')
+  private readonly LINUX_DESKTOP_FILE = path.join(this.LINUX_AUTOSTART_DIR, 'potential-potato.desktop')
+  private readonly PRODUCT_PREFIX = 'Potential-Potato-'
+
   constructor(mainWindow: BrowserWindow, currentVersion: string) {
     this.mainWindow = mainWindow
     this.currentVersion = currentVersion
@@ -49,6 +56,25 @@ export class Updater {
   }
 
   private setup(): void {
+    // Linux housekeeping: ensure autostart, update symlink, cleanup old versions
+    if (process.platform === 'linux') {
+      try {
+        this.ensureAutostartDesktop()
+      } catch (e) {
+        log.warn('Failed to ensure autostart desktop file', e)
+      }
+      try {
+        this.updateSymlinkToLatest()
+      } catch (e) {
+        log.warn('Failed to update symlink to latest', e)
+      }
+      try {
+        this.cleanupOldAppImages(2)
+      } catch (e) {
+        log.warn('Failed to cleanup old AppImages', e)
+      }
+    }
+
     // Initial check
     this.checkForUpdates()
 
@@ -63,6 +89,11 @@ export class Updater {
       clearInterval(this.updateCheckInterval)
       this.updateCheckInterval = null
     }
+  }
+
+  // Public method to trigger an immediate update check
+  public async checkNow(): Promise<void> {
+    await this.checkForUpdates()
   }
 
   private async checkForUpdates(): Promise<void> {
@@ -173,8 +204,13 @@ export class Updater {
   private async downloadAssetWithProgress(asset: { name: string; browser_download_url: string; size: number }): Promise<void> {
     const url = asset.browser_download_url
     const total = asset.size || 0
-    const downloadsDir = path.join(os.homedir(), 'Downloads')
-    const filePath = path.join(downloadsDir, asset.name)
+
+    // Choose target directory per platform
+    const targetDir = process.platform === 'linux' && asset.name.endsWith('.AppImage')
+      ? this.LINUX_APP_DIR
+      : path.join(os.homedir(), 'Downloads')
+
+    const filePath = path.join(targetDir, asset.name)
 
     await fs.promises.mkdir(path.dirname(filePath), { recursive: true })
 
@@ -274,7 +310,9 @@ export class Updater {
           } catch (e) {
             log.warn('Failed to chmod AppImage', e)
           }
-          this._pendingLinuxAppImage = filePath
+          // Update symlink now that new file exists, and plan to launch via link
+          try { this.updateSymlinkToLatest() } catch (e) { log.warn('Symlink update failed', e) }
+          this._pendingLinuxAppImageLink = this.LINUX_BIN_LINK
         }
 
         // Exit retry loop on success
@@ -298,7 +336,7 @@ export class Updater {
     }
   }
 
-  private _pendingLinuxAppImage: string | null = null
+  private _pendingLinuxAppImageLink: string | null = null
 
   private scheduleRestartCountdown(seconds: number, onZero?: () => void) {
     let remaining = seconds
@@ -310,13 +348,13 @@ export class Updater {
         try {
           if (onZero) {
             onZero()
-          } else if (process.platform === 'linux' && this._pendingLinuxAppImage) {
-            // Launch the new AppImage detached, then exit current app
+          } else if (process.platform === 'linux' && this._pendingLinuxAppImageLink) {
+            // Launch the symlink (always points to latest) detached, then exit current app
             try {
-              const child = spawn(this._pendingLinuxAppImage, [], { detached: true, stdio: 'ignore' })
+              const child = spawn(this._pendingLinuxAppImageLink, [], { detached: true, stdio: 'ignore' })
               child.unref()
             } catch (e) {
-              log.error('Failed to launch AppImage', e)
+              log.error('Failed to launch AppImage via symlink', e)
             }
             app.exit(0)
             return
@@ -333,5 +371,102 @@ export class Updater {
     }, 1000)
     // Send initial state
     this.sendToRenderer('update-restarting', { secondsRemaining: remaining })
+  }
+
+  // ----- Linux helpers -----
+  private getArchHint(): string {
+    if (process.arch === 'arm') return 'armv7l'
+    if (process.arch === 'arm64') return 'arm64'
+    if (process.arch === 'x64') return 'x86_64'
+    return process.arch
+  }
+
+  private listAppImages(): { file: string; version: string; mtime: number }[] {
+    try { fs.mkdirSync(this.LINUX_APP_DIR, { recursive: true }) } catch {}
+    const arch = this.getArchHint()
+    return (fs.readdirSync(this.LINUX_APP_DIR)
+      .filter(f => f.endsWith('.AppImage'))
+      .filter(f => f.includes(this.PRODUCT_PREFIX) && f.includes(arch))
+      .map(f => {
+        const abs = path.join(this.LINUX_APP_DIR, f)
+        const st = fs.statSync(abs)
+        const m = f.match(/-(\d+\.\d+\.\d+)[^-]*\.AppImage$/)
+        return { file: abs, version: m?.[1] ?? '0.0.0', mtime: st.mtimeMs }
+      }))
+  }
+
+  private semverCompareDesc(a: string, b: string): number {
+    const ap = a.split('.').map(n => parseInt(n, 10))
+    const bp = b.split('.').map(n => parseInt(n, 10))
+    for (let i = 0; i < Math.max(ap.length, bp.length); i++) {
+      const ai = ap[i] ?? 0, bi = bp[i] ?? 0
+      if (ai > bi) return -1
+      if (ai < bi) return 1
+    }
+    return 0
+  }
+
+  private sortedByNewest(files: { file: string; version: string; mtime: number }[]) {
+    return files.sort((x, y) => {
+      const byVer = this.semverCompareDesc(x.version, y.version)
+      if (byVer !== 0) return byVer
+      return y.mtime - x.mtime
+    })
+  }
+
+  private updateSymlinkToLatest(): void {
+    if (process.platform !== 'linux') return
+    const all = this.sortedByNewest(this.listAppImages())
+    if (all.length === 0) return
+    const latest = all[0].file
+    const linkDir = path.dirname(this.LINUX_BIN_LINK)
+    try { fs.mkdirSync(linkDir, { recursive: true }) } catch {}
+    try { try { fs.unlinkSync(this.LINUX_BIN_LINK) } catch {}
+      fs.symlinkSync(latest, this.LINUX_BIN_LINK)
+      fs.chmodSync(this.LINUX_BIN_LINK, 0o755)
+      log.info(`Symlink updated ${this.LINUX_BIN_LINK} -> ${latest}`)
+    } catch (e) {
+      log.warn('Failed to create/update symlink', e)
+    }
+  }
+
+  private ensureAutostartDesktop(): void {
+    if (process.platform !== 'linux') return
+    try { fs.mkdirSync(this.LINUX_AUTOSTART_DIR, { recursive: true }) } catch {}
+    const execPath = this.LINUX_BIN_LINK
+    const desktop = [
+      '[Desktop Entry]',
+      'Type=Application',
+      'Name=Potential Potato',
+      'Comment=Start Potential Potato at login',
+      `Exec=${execPath}`,
+      'Icon=potential-potato',
+      'X-GNOME-Autostart-enabled=true',
+      'Terminal=false',
+      'Categories=Utility;'
+    ].join('\n') + '\n'
+
+    try {
+      fs.writeFileSync(this.LINUX_DESKTOP_FILE, desktop, { encoding: 'utf-8', mode: 0o644 })
+      log.info(`Autostart desktop file ensured at ${this.LINUX_DESKTOP_FILE}`)
+    } catch (e) {
+      log.warn('Failed to write autostart desktop file', e)
+    }
+  }
+
+  private cleanupOldAppImages(keep = 2): void {
+    if (process.platform !== 'linux') return
+    const currentExec = process.execPath
+    const all = this.sortedByNewest(this.listAppImages())
+    const toDelete = all.slice(keep)
+    for (const f of toDelete) {
+      if (path.resolve(f.file) === path.resolve(currentExec)) continue
+      try {
+        fs.unlinkSync(f.file)
+        log.info('Deleted old AppImage:', f.file)
+      } catch (e) {
+        log.warn('Failed to delete old AppImage:', f.file, e)
+      }
+    }
   }
 }
