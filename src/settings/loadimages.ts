@@ -8,6 +8,7 @@ export interface RemoteSettings {
     passepartoutColor?: string,
     passepartoutWidth?: number,
     transitionDuration?: number, // in milliseconds, 0 = no transition
+    showAppVersion?: boolean
 }
 
 export let remoteSettings: RemoteSettings | undefined = undefined
@@ -110,9 +111,9 @@ function normalizeSmbPath(dir: string, fileName: string): string {
   return `${cleanDir}/${fileName}`;
 }
 
-export async function loadRemoteSettings(dir: string) {
+export async function loadRemoteSettings(dir?: string) {
   const settingsFileName = 'settings.json'
-  const settingsPath = normalizeSmbPath(dir, settingsFileName);
+  const settingsPath = normalizeSmbPath(dir ?? '', settingsFileName);
   console.log(`Loading settings from SMB path: ${settingsPath}`);
   const settingsFile = await smbClient.readFile(settingsPath)
   
@@ -126,12 +127,12 @@ export async function loadRemoteSettings(dir: string) {
   }
 }
 
-async function listImagesInDir(dir: string): Promise<{dir: string, files: string[]}> {
+async function listImagesInDir(dir?: string): Promise<{dir: string, files: string[]}> {
   const now = new Date()
   const monthStr = (now.getMonth() + 1).toString().padStart(2, '0');
   const dateStr = now.getDate().toString().padStart(2, '0');
   
-  const currentMonthDir = normalizeSmbPath(dir, monthStr);
+  const currentMonthDir = normalizeSmbPath(dir ?? '', monthStr);
   const currentDateDir = `${currentMonthDir}-${dateStr}`;
 
   console.log('currentDateDir', currentDateDir)

@@ -15,7 +15,6 @@ export default defineConfig({
         rollupOptions: {
             external: [
                 'smb2',
-                'electron-updater',
                 ...builtinModules
             ]
         }

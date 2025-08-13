@@ -61,11 +61,11 @@ const createWindow = async () => {
   // Initialize auto-updater (only in production)
   if (!MAIN_WINDOW_VITE_DEV_SERVER_URL && mainWindow) {
       const currentVersion = app.getVersion();
-      // Prefer electron-updater on Linux (AppImage) for fully automatic updates
-      if (process.platform === 'linux') {
+      // Prefer electron-updater only for Linux AppImage builds
+      if (process.platform === 'linux' && process.env.APPIMAGE) {
         setupElectronUpdater();
       } else {
-        // Fallback to existing universal updater for non-Linux
+        // Fallback to existing universal updater for other targets (including .deb installs)
         appUpdater = new UniversalUpdater(mainWindow, currentVersion, 'einord', 'potential-potato');
       }
     }

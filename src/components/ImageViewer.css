@@ -1,4 +1,6 @@
 :host {
+    position: relative;
+
     >.image-background {
         height: 100%;
         width: 100%;
@@ -10,5 +12,12 @@
             width: 100%;
             overflow: hidden;
         }
+    }
+
+    > .version-label {
+        position: absolute;
+        top: 0;
+        right: 0;
+        background-color: black;
     }
 }

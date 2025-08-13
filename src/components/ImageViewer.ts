@@ -12,6 +12,7 @@ export class ImageViewer extends HTMLElement {
   private wrapper: HTMLDivElement
   private imageLayer1: HTMLDivElement
   private imageLayer2: HTMLDivElement
+  private versionLabel: HTMLDivElement
 
   constructor() {
     super();
@@ -32,6 +33,8 @@ export class ImageViewer extends HTMLElement {
     // Listen for the next image event
     window.addEventListener("DOMContentLoaded", () => {
       window.api.onNewImage(({ dataUrl, settings }) => {
+        console.log("New image received:", dataUrl);
+        console.log("Settings for new image:", settings);
         this.currentData = dataUrl
         this.showImage(settings)
       });
@@ -61,6 +64,13 @@ export class ImageViewer extends HTMLElement {
     this.wrapper.appendChild(this.imageLayer2);
 
     this.shadow.appendChild(this.wrapper);
+
+    // Version number label
+    this.versionLabel = document.createElement('div');
+    this.versionLabel.id = 'version-label';
+    this.versionLabel.setAttribute("class", "version-label");
+    this.versionLabel.textContent = 'Version: 1.0.0';
+    this.wrapper.appendChild(this.versionLabel);
   }
   
   private createImageLayer(id: string): HTMLDivElement {
@@ -81,7 +91,7 @@ export class ImageViewer extends HTMLElement {
   private async loadCachedImage(): Promise<void> {
     try {
       const cachedImage = await window.api.getCachedImage();
-      if (cachedImage) {
+      if (cachedImage?.dataUrl != null) {
         this.currentData = cachedImage.dataUrl;
         this.showImage(cachedImage.settings);
       }
