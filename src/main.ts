@@ -1,5 +1,4 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
-import { autoUpdater } from 'electron-updater'
 import log from 'electron-log'
 import path from 'node:path'
 import started from 'electron-squirrel-startup'
@@ -65,7 +64,7 @@ const createWindow = async () => {
       const currentVersion = app.getVersion();
       // Prefer electron-updater only for Linux AppImage builds
       if (process.platform === 'linux' && process.env.APPIMAGE) {
-        setupElectronUpdater();
+        void setupElectronUpdater();
       } else {
         // Fallback to existing universal updater for other targets (including .deb installs)
         appUpdater = new UniversalUpdater(mainWindow, currentVersion, 'einord', 'potential-potato');
@@ -182,7 +181,17 @@ async function loadNextImage() {
 }
 
 // Electron-updater setup for Linux AppImage
-function setupElectronUpdater() {
+async function setupElectronUpdater() {
+  // Dynamically import to avoid requiring the module in .deb builds
+  let autoUpdater: typeof import('electron-updater')['autoUpdater'];
+  try {
+    ({ autoUpdater } = await import('electron-updater'));
+  } catch {
+    // Skip silently if electron-updater is not bundled/available
+    try { log.warn('electron-updater not available; skipping AppImage auto-update.'); } catch { /* ignore logger setup errors */ }
+    return;
+  }
+
   // Configure logger to use electron-log if desired
   autoUpdater.logger = log;
   try { log.transports.file.level = 'info'; } catch { /* ignore logger setup errors */ }
