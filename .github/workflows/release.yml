@@ -1,0 +1,134 @@
+name: Release on merge to main
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Fetch tags
+        run: |
+          git fetch --tags --force
+
+      - name: Compute monthly version (YY-M-N)
+        id: ver
+        shell: bash
+        run: |
+          set -euo pipefail
+          YEAR=$(date -u +%y)
+          MONTH=$(date -u +%-m 2>/dev/null || true)
+          if [ -z "$MONTH" ]; then
+            MONTH=$(date -u +%m | sed 's/^0//')
+          fi
+          PREFIX="$YEAR-$MONTH-"
+          NEXT=0
+          if git tag -l | grep -E "^${PREFIX}[0-9]+$" >/dev/null 2>&1; then
+            MAX=$(git tag -l | grep -E "^${PREFIX}[0-9]+$" | awk -F'-' '{print $3}' | sort -n | tail -n1)
+            NEXT=$((MAX + 1))
+          else
+            NEXT=0
+          fi
+          VERSION="${YEAR}.${MONTH}.${NEXT}"
+          echo "version=${VERSION}" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Update package.json version (semver variant)
+        run: |
+          sudo apt-get update -y && sudo apt-get install -y jq
+          jq --arg v "${{ steps.ver.outputs.version }}" '.version=$v' package.json > package.json.tmp
+          mv package.json.tmp package.json
+          cat package.json | jq '.version'
+
+      - name: Commit version bump
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          git commit -m "chore: bump version to ${VERSION} (tag ${VERSION})" || echo "No changes to commit"
+          git push origin HEAD:main
+
+      - name: Create tag
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          git tag -a "${VERSION}" -m "Release ${VERSION}"
+          git push origin "${VERSION}"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          gh release create "${VERSION}" \
+            --title "Potential Potato ${VERSION}" \
+            --notes "Automated release for ${VERSION}" \
+            --verify-tag
+
+  build-linux:
+    name: Build Linux (arm64 + armv7l) and upload to release
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source at tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release.outputs.version }}
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: |
+          npm ci --no-audit --no-fund || npm i --no-audit --no-fund
+
+      - name: Build renderer and electron bundles
+        run: npm run build
+
+      - name: Package Linux arm64 (AppImage + deb)
+        run: npx electron-builder --linux AppImage deb --arm64
+
+      - name: Package Linux armv7l (AppImage + deb)
+        run: npx electron-builder --linux AppImage deb --armv7l
+
+      - name: Upload Linux artifacts to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.release.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t FILES < <(find dist -maxdepth 1 -type f \( -name "*linux-*.AppImage" -o -name "*linux-*.deb" \))
+          if [ ${#FILES[@]} -eq 0 ]; then
+            echo "No Linux artifacts found to upload." >&2
+            exit 1
+          fi
+          echo "Uploading files:" "${FILES[@]}"
+          gh release upload "$VERSION" "${FILES[@]}" --clobber
