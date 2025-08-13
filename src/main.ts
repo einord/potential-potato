@@ -32,7 +32,8 @@ const createWindow = async () => {
       contextIsolation: true,
       nodeIntegration: false,
   // In production the preload is emitted at .vite/build/preload.js alongside main.js
-  preload: path.join(__dirname, '../preload.js'),
+  // Because __dirname resolves to .vite/build at runtime, reference the file in the same directory
+  preload: path.join(__dirname, 'preload.js'),
     },
   });
 

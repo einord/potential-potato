@@ -33,8 +33,6 @@ export class ImageViewer extends HTMLElement {
     // Listen for the next image event
     window.addEventListener("DOMContentLoaded", () => {
       window.api.onNewImage(({ dataUrl, settings }) => {
-        console.log("New image received:", dataUrl);
-        console.log("Settings for new image:", settings);
         this.currentData = dataUrl
         this.showImage(settings)
       });
