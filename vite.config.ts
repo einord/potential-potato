@@ -19,7 +19,11 @@ export default defineConfig(({ mode }) => {
             build: {
               outDir: 'dist-electron/main',
               lib: { entry: 'src/main/index.ts', formats: ['cjs'] },
-              rollupOptions: { output: { entryFileNames: 'index.js' } }
+              rollupOptions: {
+                // Don't bundle native/electron-specific deps in main process
+                external: ['electron-log'],
+                output: { entryFileNames: 'index.js' }
+              }
             }
           }
         },

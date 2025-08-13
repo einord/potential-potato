@@ -1,7 +1,9 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, Menu } from 'electron'
 import { join } from 'node:path'
+import { Updater } from './updater'
 
 let win: BrowserWindow | null = null
+let updater: Updater | null = null
 
 async function createWindow() {
   win = new BrowserWindow({
@@ -12,6 +14,26 @@ async function createWindow() {
       preload: join(__dirname, '../preload/index.js')
     }
   })
+
+  // Initialize updater once the window exists
+  updater = new Updater(win, app.getVersion())
+
+  // Create application menu with a manual update check item
+  const template = [
+    {
+      label: 'Potential Potato',
+      submenu: [
+        {
+          label: 'Sök efter uppdatering nu',
+          click: () => updater?.checkNow()
+        },
+        { type: 'separator' },
+        { role: 'quit', label: 'Avsluta' }
+      ]
+    }
+  ] as Electron.MenuItemConstructorOptions[]
+  const menu = Menu.buildFromTemplate(template)
+  Menu.setApplicationMenu(menu)
 
   if (process.env.VITE_DEV_SERVER_URL) {
     await win.loadURL(process.env.VITE_DEV_SERVER_URL)
@@ -25,6 +47,11 @@ async function createWindow() {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('before-quit', () => {
+  // Ensure timers are cleared
+  updater?.dispose()
 })
 
 app.whenReady().then(createWindow)
