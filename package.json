@@ -13,17 +13,19 @@
   "dev": "vite",
   "start": "electron .",
     "typecheck": "vue-tsc --noEmit",
-    "build": "vite build",
+    "build": "npm install && vite build",
     "dist": "npm run build && electron-builder",
   "dist:mac": "npm run build && electron-builder --mac",
   "dist:linux:arm64": "npm run build && electron-builder --linux AppImage deb rpm --arm64",
   "dist:linux:armv7l": "npm run build && electron-builder --linux AppImage deb rpm --armv7l",
+  "dist:linux:armv7l-app-image-only": "npm run build && electron-builder --linux AppImage --armv7l",
   "dist:linux:dir:arm64": "npm run build && electron-builder --linux dir --arm64",
   "dist:linux:dir:armv7l": "npm run build && electron-builder --linux dir --armv7l",
     "clean": "rimraf dist dist-electron"
   },
   "dependencies": {
-    "vue": "^3.5.10"
+    "vue": "^3.5.10",
+    "electron-log": "^5.1.4"
   },
   "devDependencies": {
     "@types/node": "^20.14.12",

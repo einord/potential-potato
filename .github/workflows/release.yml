@@ -13,11 +13,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
+  build-linux:
+    name: Build Linux artifacts (arm64 + armv7l)
     if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.ver.outputs.version }}
+      sha: ${{ steps.meta.outputs.sha }}
     steps:
       - name: Compute monthly version (YY.M.N) via GitHub API
         id: ver
@@ -44,31 +46,16 @@ jobs:
           echo "Computed version: ${VERSION}"
           echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
 
-      - name: Create GitHub Release (auto-creates tag)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ steps.ver.outputs.version }}
+      - name: Capture build metadata
+        id: meta
+        shell: bash
         run: |
-          if gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release $VERSION already exists."
-          else
-            # Create release; this will create the tag via GitHub API without using git
-            gh release create "$VERSION" \
-              --repo "$GITHUB_REPOSITORY" \
-              --target main \
-              --title "Potential Potato $VERSION" \
-              --notes "Automated release $VERSION"
-          fi
+          echo "sha=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
 
-  build-linux:
-    name: Build Linux artifacts (arm64 + armv7l) and upload
-    needs: release
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout source at tag
+      - name: Checkout source at merge commit
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.release.outputs.version }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
       - name: Set up Node
@@ -82,7 +69,7 @@ jobs:
 
       - name: Inject build version (no commit)
         env:
-          VERSION: ${{ needs.release.outputs.version }}
+          VERSION: ${{ steps.ver.outputs.version }}
         run: |
           sudo apt-get update -y
           sudo apt-get install -y jq
@@ -111,16 +98,53 @@ jobs:
       - name: List artifacts
         run: ls -1 dist || true
 
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-artifacts-${{ steps.ver.outputs.version }}
+          path: |
+            dist/*linux-*.AppImage
+            dist/*linux-*.deb
+            dist/*linux-*.rpm
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release and upload artifacts
+    needs: build-linux
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create GitHub Release (auto-creates tag)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.build-linux.outputs.version }}
+          TARGET_SHA: ${{ needs.build-linux.outputs.sha }}
+        run: |
+          if gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $VERSION already exists."
+          else
+            gh release create "$VERSION" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$TARGET_SHA" \
+              --title "Potential Potato $VERSION" \
+              --notes "Automated release $VERSION"
+          fi
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-artifacts-${{ needs.build-linux.outputs.version }}
+          path: artifacts
+
       - name: Upload artifacts to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ needs.release.outputs.version }}
+          VERSION: ${{ needs.build-linux.outputs.version }}
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -t FILES < <(find dist -maxdepth 1 -type f \( -name "*linux-*.AppImage" -o -name "*linux-*.deb" -o -name "*linux-*.rpm" \))
+          mapfile -t FILES < <(find artifacts -type f -maxdepth 1 -name "*" )
           if [ ${#FILES[@]} -eq 0 ]; then
-            echo "No artifacts found."
+            echo "No artifacts found to upload."
             exit 1
           fi
           echo "Uploading: ${FILES[*]}"
