@@ -176,59 +176,125 @@ export class Updater {
     const downloadsDir = path.join(os.homedir(), 'Downloads')
     const filePath = path.join(downloadsDir, asset.name)
 
-    const res = await fetch(url, { headers: { 'User-Agent': `${this.repo}-updater` } })
-    if (!res.ok || !res.body) throw new Error(`Failed to download update: ${res.status}`)
-
-    // Stream to file and emit progress
     await fs.promises.mkdir(path.dirname(filePath), { recursive: true })
-    const fileStream = fs.createWriteStream(filePath)
 
-    const reader = (res.body as any).getReader?.()
-    if (reader) {
-      let downloaded = 0
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        if (value) {
-          const buf = Buffer.from(value)
-          fileStream.write(buf)
-          downloaded += buf.length
-          if (total > 0) {
-            const percent = Math.round((downloaded / total) * 100)
-            this.sendToRenderer('update-download-progress', { percent })
+    // Retry logic with resume support
+    const maxRetries = 3
+    let attempt = 0
+    let downloaded = 0
+
+    // If a partial file exists, try to resume
+    try {
+      const stat = await fs.promises.stat(filePath)
+      if (stat.isFile() && stat.size > 0 && stat.size < total) {
+        downloaded = stat.size
+      }
+    } catch {}
+
+    while (attempt < maxRetries) {
+      try {
+        const headers: Record<string, string> = { 'User-Agent': `${this.repo}-updater` }
+        if (downloaded > 0) {
+          headers['Range'] = `bytes=${downloaded}-`
+        }
+
+        const res = await fetch(url, { headers })
+        if (!res.ok || !res.body) throw new Error(`Failed to download update: ${res.status}`)
+
+        // Determine expected total for progress if server supports partial content
+        let expectedTotal = total
+        const contentRange = res.headers.get('content-range') || res.headers.get('Content-Range')
+        if (contentRange) {
+          const m = /bytes \d+-\d+\/(\d+)/i.exec(contentRange)
+          if (m && m[1]) expectedTotal = parseInt(m[1], 10)
+        } else {
+          const cl = res.headers.get('content-length') || res.headers.get('Content-Length')
+          if (!expectedTotal && cl) expectedTotal = parseInt(cl, 10)
+        }
+
+        // Open file stream (append if resuming)
+        const fileStream = fs.createWriteStream(filePath, { flags: downloaded > 0 ? 'a' : 'w' })
+
+        const reader = (res.body as any).getReader?.()
+        if (reader) {
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            if (value) {
+              const buf = Buffer.from(value)
+              const canWrite = fileStream.write(buf)
+              downloaded += buf.length
+              if (expectedTotal > 0) {
+                const percent = Math.max(0, Math.min(100, Math.round((downloaded / expectedTotal) * 100)))
+                this.sendToRenderer('update-download-progress', { percent })
+              }
+              if (!canWrite) {
+                await new Promise<void>((resolve) => fileStream.once('drain', resolve))
+              }
+            }
           }
+          await new Promise<void>((resolve, reject) => {
+            fileStream.end(() => resolve())
+            fileStream.on('error', reject)
+          })
+        } else {
+          // Fallback: stream without granular progress using WHATWG stream
+          await new Promise<void>((resolve, reject) => {
+            res.body?.pipeTo(new WritableStream({
+              write: (chunk: any) => {
+                const buf = Buffer.from(chunk)
+                const ok = (fileStream as any).write(buf)
+                downloaded += buf.length
+                if (expectedTotal > 0) {
+                  const percent = Math.max(0, Math.min(100, Math.round((downloaded / expectedTotal) * 100)))
+                  this.sendToRenderer('update-download-progress', { percent })
+                }
+                if (!ok) {
+                  return new Promise<void>((resolve2) => (fileStream as any).once('drain', resolve2))
+                }
+              },
+              close: () => { (fileStream as any).end(); resolve() },
+              abort: (reason) => { try { (fileStream as any).destroy() } catch {} ; reject(reason) }
+            }))
+          })
+        }
+
+        // Success, apply post-download handling
+        if (process.platform === 'darwin') {
+          try {
+            const result = await shell.openPath(filePath)
+            if (result) shell.showItemInFolder(filePath)
+          } catch (e) {
+            log.warn('Failed to open downloaded update', e)
+            shell.showItemInFolder(filePath)
+          }
+        } else if (process.platform === 'linux' && filePath.endsWith('.AppImage')) {
+          try {
+            await fs.promises.chmod(filePath, 0o755)
+          } catch (e) {
+            log.warn('Failed to chmod AppImage', e)
+          }
+          this._pendingLinuxAppImage = filePath
+        }
+
+        // Exit retry loop on success
+        return
+      } catch (err) {
+        attempt += 1
+        log.warn(`Download attempt ${attempt} failed`, err)
+        if (attempt >= maxRetries) {
+          throw err
+        }
+        // Small delay before retry
+        await new Promise((r) => setTimeout(r, 1000 * attempt))
+        // On retry, keep current downloaded size from existing file
+        try {
+          const stat = await fs.promises.stat(filePath)
+          if (stat.isFile()) downloaded = stat.size
+        } catch {
+          downloaded = 0
         }
       }
-      fileStream.end()
-    } else {
-      // Fallback: stream without granular progress
-      await new Promise<void>((resolve, reject) => {
-        res.body?.pipeTo(new WritableStream({
-          write: (chunk: any) => fileStream.write(Buffer.from(chunk)),
-          close: () => { fileStream.end(); resolve() },
-          abort: (reason) => { fileStream.destroy(); reject(reason) }
-        }))
-      })
-    }
-
-    // Post-download handling per platform
-    if (process.platform === 'darwin') {
-      try {
-        const result = await shell.openPath(filePath)
-        if (result) shell.showItemInFolder(filePath)
-      } catch (e) {
-        log.warn('Failed to open downloaded update', e)
-        shell.showItemInFolder(filePath)
-      }
-    } else if (process.platform === 'linux' && filePath.endsWith('.AppImage')) {
-      try {
-        // Make it executable
-        await fs.promises.chmod(filePath, 0o755)
-      } catch (e) {
-        log.warn('Failed to chmod AppImage', e)
-      }
-      // Replace default relaunch behavior: launch the new AppImage after countdown
-      this._pendingLinuxAppImage = filePath
     }
   }
 
