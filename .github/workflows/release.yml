@@ -1,158 +1,139 @@
-name: Build and Release (date-based version)
+name: Release on merge to main
 
 on:
-  push:
-    branches: [ main ]
+  pull_request:
+    types: [closed]
+    branches: [main]
 
 permissions:
   contents: write
-  packages: write
-  actions: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  prepare_version:
+  release:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.v.outputs.version }}
-      tag: ${{ steps.v.outputs.tag }}
+      version: ${{ steps.ver.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout main
+        uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
-          fetch-tags: true
-      - id: v
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Fetch tags
+        run: |
+          git fetch --tags --force
+
+      - name: Compute monthly version (YY-M-N)
+        id: ver
         shell: bash
         run: |
           set -euo pipefail
-          YEAR=$(date -u +%Y)
-          M=$(date -u +%-m)
-          PREFIX="$YEAR.$M."
-          git fetch --tags --force || true
-          LAST_INDEX=$(git tag -l "v${PREFIX}*" \
-            | sed -E 's/^v[0-9]+\.[0-9]+\.([0-9]+)$/\1/' \
-            | sort -n \
-            | tail -n1)
-          if [ -z "${LAST_INDEX:-}" ]; then LAST_INDEX=0; fi
-          INDEX=$((LAST_INDEX + 1))
-          VERSION="${YEAR}.${M}.${INDEX}"
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "tag=${VERSION}" >> "$GITHUB_OUTPUT"
+          YEAR=$(date -u +%y)
+          MONTH=$(date -u +%-m 2>/dev/null || true)
+          if [ -z "$MONTH" ]; then
+            MONTH=$(date -u +%m | sed 's/^0//')
+          fi
+          PREFIX="$YEAR-$MONTH-"
+          NEXT=0
+          if git tag -l | grep -E "^${PREFIX}[0-9]+$" >/dev/null 2>&1; then
+            MAX=$(git tag -l | grep -E "^${PREFIX}[0-9]+$" | awk -F'-' '{print $3}' | sort -n | tail -n1)
+            NEXT=$((MAX + 1))
+          else
+            NEXT=0
+          fi
+          VERSION="${YEAR}.${MONTH}.${NEXT}"
+          echo "version=${VERSION}" | tee -a "$GITHUB_OUTPUT"
 
-  build:
-    needs: prepare_version
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        include:
-          - os: macos-latest
-            platform: darwin
-            arch: x64
-            name: macOS Intel
-            script: make:macos
-          - os: macos-latest
-            platform: darwin
-            arch: arm64
-            name: macOS Apple Silicon
-            script: make:macos
-          - os: windows-latest
-            platform: win32
-            arch: x64
-            name: Windows x64
-            script: make:windows
-          - os: ubuntu-latest
-            platform: linux
-            arch: x64
-            name: Linux x64
-            script: make:linux
-          - os: ubuntu-latest
-            platform: linux
-            arch: arm64
-            name: Raspberry Pi (ARM64)
-            script: make:rpi
-          - os: ubuntu-latest
-            platform: linux
-            arch: armv7l
-            name: Raspberry Pi Legacy (ARM32)
-            script: make:rpi-legacy
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - uses: pnpm/action-setup@v2
-        with:
-          version: latest
-      - shell: bash
-        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-      - uses: actions/cache@v3
-        with:
-          path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: ${{ runner.os }}-pnpm-store-
-      - run: pnpm install
-      - if: matrix.os == 'ubuntu-latest'
+      - name: Update package.json version (semver variant)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y dpkg fakeroot rpm
-      - name: Set package.json version (no commit)
+          sudo apt-get update -y && sudo apt-get install -y jq
+          jq --arg v "${{ steps.ver.outputs.version }}" '.version=$v' package.json > package.json.tmp
+          mv package.json.tmp package.json
+          cat package.json | jq '.version'
+
+      - name: Commit version bump
         env:
-          VERSION: ${{ needs.prepare_version.outputs.version }}
+          VERSION: ${{ steps.ver.outputs.version }}
         run: |
-          node -e "const fs=require('fs'); const p=require('./package.json'); p.version=process.env.VERSION; fs.writeFileSync('package.json', JSON.stringify(p, null, 2)+'\n')"
-          echo "package.json version set to ${VERSION}"
-      - run: pnpm run lint
-      - run: pnpm run ${{ matrix.script }}
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.name }}-${{ matrix.arch }}
-          path: out/make/**/*
-          retention-days: 30
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          git commit -m "chore: bump version to ${VERSION} (tag ${VERSION})" || echo "No changes to commit"
+          git push origin HEAD:main
 
-  release:
-    needs: [build, prepare_version]
+      - name: Create tag
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          git tag -a "${VERSION}" -m "Release ${VERSION}"
+          git push origin "${VERSION}"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          gh release create "${VERSION}" \
+            --title "Potential Potato ${VERSION}" \
+            --notes "Automated release for ${VERSION}" \
+            --verify-tag
+
+  build-linux:
+    name: Build Linux (arm64 + armv7l) and upload to release
+    needs: release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - name: Checkout source at tag
+        uses: actions/checkout@v4
         with:
-          path: artifacts
-      - run: ls -la artifacts/
-      - name: Prepare release assets
+          ref: ${{ needs.release.outputs.version }}
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
         run: |
-          mkdir -p release-assets
-          find artifacts -name "*.deb" -exec cp {} release-assets/ \;
-          find artifacts -name "*.rpm" -exec cp {} release-assets/ \;
-          find artifacts -name "*.zip" -exec cp {} release-assets/ \;
-          find artifacts -name "*.exe" -exec cp {} release-assets/ \;
-          find artifacts -name "*Setup.exe" -exec cp {} release-assets/ \;
-          find artifacts -name "*.yml" -exec cp {} release-assets/ \;
-          find artifacts -name "*.yaml" -exec cp {} release-assets/ \;
-          ls -la release-assets/
-      - uses: softprops/action-gh-release@v1
-        with:
-          tag_name: v${{ needs.prepare_version.outputs.tag }}
-          name: Release v${{ needs.prepare_version.outputs.tag }}
-          body: |
-            ## Automatic Release
+          npm ci --no-audit --no-fund || npm i --no-audit --no-fund
 
-            Version: v${{ needs.prepare_version.outputs.tag }}
+      - name: Install system packaging tools (rpm)
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y rpm
 
-            This release uses date-based versioning (YY.M.D.N).
+      - name: Build renderer and electron bundles
+        run: npm run build
 
-            ### Supported Platforms:
-            - macOS: `.zip` files for Intel and Apple Silicon
-            - Windows: `.exe` installer
-            - Linux x64: `.deb` and `.rpm` packages
-            - Raspberry Pi OS: `.deb` packages for ARM64 and ARM32
+      - name: Package Linux arm64 (AppImage + deb + rpm)
+        run: npx electron-builder --linux AppImage deb rpm --arm64
 
-            ### Installation:
-            - macOS: Download and extract the `.zip` file
-            - Windows: Run the `.exe` installer
-            - Ubuntu/Debian: `sudo dpkg -i potential-potato_*.deb`
-            - CentOS/RHEL/Fedora: `sudo rpm -i potential-potato_*.rpm`
-            - Raspberry Pi: `sudo dpkg -i potential-potato_*_arm64.deb`
-          files: release-assets/*
-          draft: false
-          prerelease: false
+      - name: Package Linux armv7l (AppImage + deb + rpm)
+        run: npx electron-builder --linux AppImage deb rpm --armv7l
+
+      - name: Upload Linux artifacts to GitHub Release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.release.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t FILES < <(find dist -maxdepth 1 -type f \( -name "*linux-*.AppImage" -o -name "*linux-*.deb" -o -name "*linux-*.rpm" \))
+          if [ ${#FILES[@]} -eq 0 ]; then
+            echo "No Linux artifacts found to upload." >&2
+            exit 1
+          fi
+          echo "Uploading files:" "${FILES[@]}"
+          gh release upload "$VERSION" "${FILES[@]}" --clobber

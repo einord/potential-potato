@@ -1,19 +1,27 @@
 {
   "compilerOptions": {
     "target": "ES2020",
+    "useDefineForClassFields": true,
     "module": "ESNext",
-    "allowJs": true,
-    "skipLibCheck": true,
-    "esModuleInterop": true,
-    "noImplicitAny": true,
-    "sourceMap": true,
-    "baseUrl": ".",
-    "outDir": "dist",
-    "moduleResolution": "bundler",
+    "moduleResolution": "Bundler",
     "resolveJsonModule": true,
-    "types": ["node", "vite/client"],
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "strict": true,
+    "noEmit": true,
+    "types": ["node"],
     "lib": ["ES2020", "DOM"],
-    "strictNullChecks": true
+    "baseUrl": ".",
+    "paths": {
+      "@renderer/*": ["src/renderer/*"],
+      "@main/*": ["src/main/*"],
+      "@preload/*": ["src/preload/*"]
+    }
   },
-  "include": ["src", "src/vite-env.d.ts", "forge.env.d.ts"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.d.ts",
+    "src/**/*.tsx",
+    "src/**/*.vue"
+  ]
 }
