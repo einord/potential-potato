@@ -90,23 +90,26 @@ export class UniversalUpdater {
     }
   }
 
-  private findAssetForPlatform(assets: Array<{ name: string; browser_download_url: string; size: number }>): any {
+  private findAssetForPlatform(assets: Array<ReleaseAsset>): ReleaseAsset | null {
     const arch = this.getSystemArchitecture();
     
     switch (this.platform) {
       case 'win32':
-        return assets.find(asset => 
-          asset.name.endsWith('.exe') || asset.name.includes('Setup.exe')
+        return (
+          assets.find(asset => asset.name.endsWith('.exe') || asset.name.includes('Setup.exe')) ||
+          null
         );
       case 'darwin':
         // Prefer DMG if available, otherwise fall back to ZIP; don't require 'darwin' in name to be robust to naming differences
         return (
           assets.find(asset => asset.name.toLowerCase().endsWith('.dmg')) ||
-          assets.find(asset => asset.name.toLowerCase().endsWith('.zip'))
+          assets.find(asset => asset.name.toLowerCase().endsWith('.zip')) ||
+          null
         );
       case 'linux':
-        return assets.find(asset => 
-          asset.name.endsWith('.deb') && asset.name.includes(arch)
+        return (
+          assets.find(asset => asset.name.endsWith('.deb') && asset.name.includes(arch)) ||
+          null
         );
       default:
         return null;

@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { autoUpdater } from 'electron-updater'
+import log from 'electron-log'
 import path from 'node:path'
 import started from 'electron-squirrel-startup'
 import { currentSmbSettings, ensureSmbSettingsFile, loadSmbSettings, smbSettingsFile } from './settings' // Ensure settings are initialized
@@ -162,17 +163,8 @@ async function loadNextImage() {
 // Electron-updater setup for Linux AppImage
 function setupElectronUpdater() {
   // Configure logger to use electron-log if desired
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const log = require('electron-log');
-    autoUpdater.logger = log;
-    // set file log level if available
-    if (autoUpdater.logger && (autoUpdater.logger as unknown as { transports?: { file?: { level?: string } } }).transports?.file) {
-      (autoUpdater.logger as unknown as { transports: { file: { level: string } } }).transports.file.level = 'info';
-    }
-  } catch (e) {
-    // ignore logger setup errors
-  }
+  autoUpdater.logger = log;
+  try { log.transports.file.level = 'info'; } catch { /* ignore logger setup errors */ }
 
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;

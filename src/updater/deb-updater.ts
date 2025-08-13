@@ -184,7 +184,7 @@ export class DebUpdater {
     });
   }
 
-  private sendToRenderer(channel: string, data?: any): void {
+  private sendToRenderer(channel: string, data?: unknown): void {
     if (!this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send(channel, data);
     }
