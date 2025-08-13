@@ -1,3 +1,25 @@
+# potential-potato — Auto-update on Raspberry Pi (AppImage)
+
+This project is configured to build Linux AppImages for Raspberry Pi (armv7l for Pi 2B and arm64 for newer Pis) and use electron-updater for fully automatic updates from GitHub Releases.
+
+## Build and publish (Linux/AppImage)
+
+- Build locally:
+  - pnpm run build:all
+  - pnpm run dist:linux
+
+- Publish to GitHub Releases (requires GITHUB_TOKEN):
+  - pnpm run release:linux
+
+Artifacts:
+- AppImage for armv7l and arm64, with update metadata for electron-updater.
+
+## Runtime
+
+On Linux, the app will check for updates on startup and hourly, download updates, and restart to apply (no sudo required).
+
+Notes:
+- AppImage requires FUSE on the target system. On some Raspberry Pi OS images, install `libfuse2` if missing.
 # potential-potato
 
 A cross-platform Electron application built with TypeScript and Vite.
