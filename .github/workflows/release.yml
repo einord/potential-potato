@@ -19,18 +19,11 @@ jobs:
     outputs:
       version: ${{ steps.ver.outputs.version }}
     steps:
-      - name: Checkout main
-        uses: actions/checkout@v4
-        with:
-            ref: main
-            fetch-depth: 0
-
-      - name: Fetch tags
-        run: git fetch --tags --force
-
-      - name: Compute monthly version (YY.M.N)
+      - name: Compute monthly version (YY.M.N) via GitHub API
         id: ver
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           YEAR=$(date -u +%y)
@@ -38,30 +31,20 @@ jobs:
           if [ -z "$MONTH" ]; then
             MONTH=$(date -u +%m | sed 's/^0//')
           fi
-            # Gather existing tags for this month in dot format: YY.M.*
-          TAGS=$(git tag -l "${YEAR}.${MONTH}.*" || true)
-          if [ -n "$TAGS" ]; then
-            MAX=$(echo "$TAGS" | awk -F'.' '{print $3}' | sort -n | tail -n1)
+          PREFIX="${YEAR}.${MONTH}."
+          # List existing matching tag refs via GitHub API and extract tag names
+          TAGS=$(gh api repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/${PREFIX} --jq '.[].ref' 2>/dev/null | sed -E 's#.*/##') || true
+          if [ -n "${TAGS}" ]; then
+            MAX=$(echo "${TAGS}" | awk -F'.' '$1!=""{print $3}' | sort -n | tail -n1)
             NEXT=$((MAX + 1))
           else
             NEXT=0
           fi
           VERSION="${YEAR}.${MONTH}.${NEXT}"
-          echo "Computed version: $VERSION"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Computed version: ${VERSION}"
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
 
-      - name: Create tag (no version commit)
-        env:
-          VERSION: ${{ steps.ver.outputs.version }}
-        run: |
-          if git rev-parse "$VERSION" >/dev/null 2>&1; then
-            echo "Tag $VERSION already exists."
-          else
-            git tag -a "$VERSION" -m "Release $VERSION"
-            git push origin "$VERSION"
-          fi
-
-      - name: Create GitHub Release
+      - name: Create GitHub Release (auto-creates tag)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.ver.outputs.version }}
@@ -69,10 +52,11 @@ jobs:
           if gh release view "$VERSION" >/dev/null 2>&1; then
             echo "Release $VERSION already exists."
           else
+            # Create release; this will create the tag via GitHub API without using git
             gh release create "$VERSION" \
+              --target main \
               --title "Potential Potato $VERSION" \
-              --notes "Automated release $VERSION" \
-              --verify-tag
+              --notes "Automated release $VERSION"
           fi
 
   build-linux:
