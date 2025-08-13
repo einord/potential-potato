@@ -94,6 +94,7 @@ onMounted(() => {
   place-items: center;
   min-height: 100vh;
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  background-color: black;
 }
 
 h1 { font-size: 2.25rem; }

@@ -310,8 +310,20 @@ export class Updater {
           } catch (e) {
             log.warn('Failed to chmod AppImage', e)
           }
-          // Update symlink now that new file exists, and plan to launch via link
-          try { this.updateSymlinkToLatest() } catch (e) { log.warn('Symlink update failed', e) }
+          // Remember the exact file we just downloaded
+          this._pendingLinuxAppImagePath = filePath
+          // Point the stable symlink directly to this file
+          try {
+            const linkDir = path.dirname(this.LINUX_BIN_LINK)
+            try { fs.mkdirSync(linkDir, { recursive: true }) } catch {}
+            try { fs.unlinkSync(this.LINUX_BIN_LINK) } catch {}
+            fs.symlinkSync(filePath, this.LINUX_BIN_LINK)
+            fs.chmodSync(this.LINUX_BIN_LINK, 0o755)
+            log.info(`Symlink updated ${this.LINUX_BIN_LINK} -> ${filePath}`)
+          } catch (e) {
+            log.warn('Symlink update failed', e)
+          }
+          // Plan to launch via symlink (preferred); will fallback to direct path if missing
           this._pendingLinuxAppImageLink = this.LINUX_BIN_LINK
         }
 
@@ -337,6 +349,7 @@ export class Updater {
   }
 
   private _pendingLinuxAppImageLink: string | null = null
+  private _pendingLinuxAppImagePath: string | null = null
 
   private scheduleRestartCountdown(seconds: number, onZero?: () => void) {
     let remaining = seconds
@@ -348,16 +361,29 @@ export class Updater {
         try {
           if (onZero) {
             onZero()
-          } else if (process.platform === 'linux' && this._pendingLinuxAppImageLink) {
-            // Launch the symlink (always points to latest) detached, then exit current app
-            try {
-              const child = spawn(this._pendingLinuxAppImageLink, [], { detached: true, stdio: 'ignore' })
-              child.unref()
-            } catch (e) {
-              log.error('Failed to launch AppImage via symlink', e)
+          } else if (process.platform === 'linux') {
+            // Prefer launching the symlink; if missing, fallback to the direct file path
+            let launchPath: string | null = this._pendingLinuxAppImageLink
+            if (!launchPath || !fs.existsSync(launchPath)) {
+              launchPath = this._pendingLinuxAppImagePath && fs.existsSync(this._pendingLinuxAppImagePath)
+                ? this._pendingLinuxAppImagePath
+                : null
             }
-            app.exit(0)
-            return
+            if (!launchPath) {
+              log.error('No launch path available for AppImage (symlink/file missing). Aborting restart.')
+              this.sendToRenderer('update-error', 'Kunde inte starta den nya versionen (fil saknas).')
+              return
+            }
+            try {
+              const child = spawn(launchPath, [], { detached: true, stdio: 'ignore' })
+              child.unref()
+              app.exit(0)
+              return
+            } catch (e) {
+              log.error('Failed to launch AppImage', e)
+              this.sendToRenderer('update-error', 'Kunde inte starta den nya versionen.')
+              return
+            }
           } else {
             // Default relaunch (macOS/others)
             app.relaunch()
