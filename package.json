@@ -1,10 +1,13 @@
 {
   "name": "potential-potato",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "Electron + Vue + Vite app that runs on macOS and Raspberry Pi (armv7l/arm64)",
   "private": true,
   "main": "dist-electron/main/index.js",
-  "author": "",
+  "author": {
+    "name": "plik",
+    "email": "potential-potato@plik.se"
+  },
   "license": "MIT",
   "scripts": {
   "dev": "vite",
@@ -13,8 +16,8 @@
     "build": "vite build",
     "dist": "npm run build && electron-builder",
   "dist:mac": "npm run build && electron-builder --mac",
-  "dist:linux:arm64": "npm run build && electron-builder --linux AppImage deb --arm64",
-  "dist:linux:armv7l": "npm run build && electron-builder --linux AppImage deb --armv7l",
+  "dist:linux:arm64": "npm run build && electron-builder --linux AppImage deb rpm --arm64",
+  "dist:linux:armv7l": "npm run build && electron-builder --linux AppImage deb rpm --armv7l",
   "dist:linux:dir:arm64": "npm run build && electron-builder --linux dir --arm64",
   "dist:linux:dir:armv7l": "npm run build && electron-builder --linux dir --armv7l",
     "clean": "rimraf dist dist-electron"
@@ -55,7 +58,8 @@
     "linux": {
       "target": [
         "AppImage",
-        "deb"
+  "deb",
+  "rpm"
       ],
       "category": "Utility",
       "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
