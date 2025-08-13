@@ -1,4 +1,4 @@
-name: Build and Release
+name: Build and Release (date-based version)
 
 on:
   push:
@@ -10,56 +10,40 @@ permissions:
   actions: read
 
 jobs:
-  bump_version:
-    name: Bump version and push
+  prepare_version:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && !contains(github.event.head_commit.message, '[skip ci]')
     outputs:
-      new_version: ${{ steps.bump.outputs.new_version }}
+      version: ${{ steps.v.outputs.version }}
+      tag: ${{ steps.v.outputs.tag }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Bump package.json version (patch)
-        id: bump
+          fetch-tags: true
+      - id: v
         shell: bash
         run: |
-          # Always bump patch for push-based releases. Adjust if you want minor/major triggers.
-          CURRENT=$(node -p "require('./package.json').version")
-          IFS='.' read -r MAJ MIN PAT <<< "$CURRENT"
-          PAT=$((PAT + 1))
-          NEW_VERSION="$MAJ.$MIN.$PAT"
-          node -e "const fs=require('fs'); const p=require('./package.json'); p.version='${NEW_VERSION}'; fs.writeFileSync('package.json', JSON.stringify(p, null, 2)+'\n')"
-          echo "Bumped version: $CURRENT -> $NEW_VERSION"
-          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-
-      - name: Commit and push version bump
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add package.json
-          git commit -m "chore: release v${{ steps.bump.outputs.new_version }} [skip ci]" || echo "No changes to commit"
-          git push origin HEAD:main
+          set -euo pipefail
+          YEAR=$(date -u +%Y)
+          M=$(date -u +%-m)
+          PREFIX="$YEAR.$M."
+          git fetch --tags --force || true
+          LAST_INDEX=$(git tag -l "v${PREFIX}*" \
+            | sed -E 's/^v[0-9]+\.[0-9]+\.([0-9]+)$/\1/' \
+            | sort -n \
+            | tail -n1)
+          if [ -z "${LAST_INDEX:-}" ]; then LAST_INDEX=0; fi
+          INDEX=$((LAST_INDEX + 1))
+          VERSION="${YEAR}.${M}.${INDEX}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${VERSION}" >> "$GITHUB_OUTPUT"
 
   build:
-    name: Build artifacts
-    needs: bump_version
+    needs: prepare_version
     runs-on: ${{ matrix.os }}
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && !contains(github.event.head_commit.message, '[skip ci]')
     strategy:
       matrix:
         include:
-          # macOS builds
           - os: macos-latest
             platform: darwin
             arch: x64
@@ -70,19 +54,16 @@ jobs:
             arch: arm64
             name: macOS Apple Silicon
             script: make:macos
-          # Windows builds
           - os: windows-latest
             platform: win32
             arch: x64
             name: Windows x64
             script: make:windows
-          # Linux builds
           - os: ubuntu-latest
             platform: linux
             arch: x64
             name: Linux x64
             script: make:linux
-          # Raspberry Pi builds
           - os: ubuntu-latest
             platform: linux
             arch: arm64
@@ -94,77 +75,48 @@ jobs:
             name: Raspberry Pi Legacy (ARM32)
             script: make:rpi-legacy
     steps:
-      - name: Checkout code (bumped commit)
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: main
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v2
+      - uses: pnpm/action-setup@v2
         with:
           version: latest
-
-      - name: Get pnpm store directory
-        shell: bash
-        run: |
-          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-
-      - name: Setup pnpm cache
-        uses: actions/cache@v3
-        env:
-          STORE_PATH: ${{ env.STORE_PATH }}
+      - shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+      - uses: actions/cache@v3
         with:
           path: ${{ env.STORE_PATH }}
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
-
-      - name: Install dependencies
-        run: pnpm install
-
-      - name: Install Linux build dependencies
-        if: matrix.os == 'ubuntu-latest'
+          restore-keys: ${{ runner.os }}-pnpm-store-
+      - run: pnpm install
+      - if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
           sudo apt-get install -y dpkg fakeroot rpm
-
-      - name: Lint code
-        run: pnpm run lint
-
-      - name: Build application
-        run: pnpm run ${{ matrix.script }}
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+      - name: Set package.json version (no commit)
+        env:
+          VERSION: ${{ needs.prepare_version.outputs.version }}
+        run: |
+          node -e "const fs=require('fs'); const p=require('./package.json'); p.version=process.env.VERSION; fs.writeFileSync('package.json', JSON.stringify(p, null, 2)+'\n')"
+          echo "package.json version set to ${VERSION}"
+      - run: pnpm run lint
+      - run: pnpm run ${{ matrix.script }}
+      - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}-${{ matrix.arch }}
-          path: |
-            out/make/**/*
+          path: out/make/**/*
           retention-days: 30
 
   release:
-    name: Create Release
-    needs: [build, bump_version]
+    needs: [build, prepare_version]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && !contains(github.event.head_commit.message, '[skip ci]')
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
         with:
           path: artifacts
-
-      - name: Display structure of downloaded files
-        run: ls -la artifacts/
-
+      - run: ls -la artifacts/
       - name: Prepare release assets
         run: |
           mkdir -p release-assets
@@ -176,18 +128,16 @@ jobs:
           find artifacts -name "*.yml" -exec cp {} release-assets/ \;
           find artifacts -name "*.yaml" -exec cp {} release-assets/ \;
           ls -la release-assets/
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+      - uses: softprops/action-gh-release@v1
         with:
-          tag_name: v${{ needs.bump_version.outputs.new_version }}
-          name: Release v${{ needs.bump_version.outputs.new_version }}
+          tag_name: v${{ needs.prepare_version.outputs.tag }}
+          name: Release v${{ needs.prepare_version.outputs.tag }}
           body: |
             ## Automatic Release
 
-            Version: v${{ needs.bump_version.outputs.new_version }}
+            Version: v${{ needs.prepare_version.outputs.tag }}
 
-            This release was automatically generated from the latest main branch.
+            This release uses date-based versioning (YY.M.D.N).
 
             ### Supported Platforms:
             - macOS: `.zip` files for Intel and Apple Silicon
