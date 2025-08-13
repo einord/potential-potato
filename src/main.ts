@@ -21,6 +21,7 @@ let appUpdater: UniversalUpdater | undefined = undefined
 let updaterInterval: NodeJS.Timeout | undefined
 type CachedImage = { dataUrl: string; settings: unknown; fileName: string }
 let cachedImageData: CachedImage | undefined = undefined
+let lastRemoteSettingsJson: string | undefined
 
 const createWindow = async () => {
   // Create the browser window.
@@ -32,7 +33,8 @@ const createWindow = async () => {
       contextIsolation: true,
       nodeIntegration: false,
   // In production the preload is emitted at .vite/build/preload.js alongside main.js
-  preload: path.join(__dirname, '../preload.js'),
+  // Because __dirname resolves to .vite/build at runtime, reference the file in the same directory
+  preload: path.join(__dirname, 'preload.js'),
     },
   });
 
@@ -61,11 +63,11 @@ const createWindow = async () => {
   // Initialize auto-updater (only in production)
   if (!MAIN_WINDOW_VITE_DEV_SERVER_URL && mainWindow) {
       const currentVersion = app.getVersion();
-      // Prefer electron-updater on Linux (AppImage) for fully automatic updates
-      if (process.platform === 'linux') {
+      // Prefer electron-updater only for Linux AppImage builds
+      if (process.platform === 'linux' && process.env.APPIMAGE) {
         setupElectronUpdater();
       } else {
-        // Fallback to existing universal updater for non-Linux
+        // Fallback to existing universal updater for other targets (including .deb installs)
         appUpdater = new UniversalUpdater(mainWindow, currentVersion, 'einord', 'potential-potato');
       }
     }
@@ -76,6 +78,14 @@ const createWindow = async () => {
 ipcMain.handle('get-cached-image', () => {
   console.log('Cached image requested, returning:', cachedImageData ? 'cached data' : 'no cache');
   return cachedImageData;
+});
+
+ipcMain.handle('get-app-version', () => {
+  try {
+    return app.getVersion();
+  } catch {
+    return 'unknown';
+  }
 });
 
 // This method will be called when Electron has finished
@@ -146,6 +156,17 @@ async function loadNextImage() {
     if (imageData) {
       // Cache the image data
       cachedImageData = imageData;
+
+      // Emit remote settings update if changed
+      try {
+        const settingsJson = JSON.stringify(imageData.settings ?? {});
+        if (settingsJson !== lastRemoteSettingsJson) {
+          lastRemoteSettingsJson = settingsJson;
+          mainWindow.webContents.send('remote-settings-updated', imageData.settings);
+        }
+      } catch {
+        // ignore JSON stringify errors
+      }
       
       // Send the image data to the renderer process
       mainWindow.webContents.send('new-image', imageData);

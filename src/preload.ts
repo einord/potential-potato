@@ -35,6 +35,16 @@ contextBridge.exposeInMainWorld('api', {
   
   // Cached image API
   getCachedImage: () => ipcRenderer.invoke('get-cached-image'),
+
+  // App info API
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+
+  // Remote settings event
+  onRemoteSettingsUpdated: (callback: (settings: RemoteSettings) => void) => {
+    const wrapper = (_event: IpcRendererEvent, settings: RemoteSettings) => callback(settings);
+    ipcRenderer.on('remote-settings-updated', wrapper);
+    return () => ipcRenderer.removeListener('remote-settings-updated', wrapper);
+  },
   
   // Auto-updater API
   updater: {

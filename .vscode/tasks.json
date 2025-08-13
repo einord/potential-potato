@@ -1,0 +1,29 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Start app to verify preload fix",
+			"type": "shell",
+			"command": "pnpm run start",
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Start app to verify version label",
+			"type": "shell",
+			"command": "pnpm run start",
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Restart app to verify live settings updates",
+			"type": "shell",
+			"command": "printf 'rs\\n'",
+			"isBackground": false
+		}
+	]
+}

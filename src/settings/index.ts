@@ -4,7 +4,6 @@ import { promises as fs } from 'fs'
 
 const userDataPath = app.getPath('userData')
 export const smbSettingsFile = join(userDataPath, 'pp-smb.json')
-export let currentSmbSettings: SmbSettings | undefined = undefined
 
 export interface SmbSettings {
     host?: string
@@ -25,6 +24,8 @@ const defaultSmbSettings: SmbSettings = {
     password: '',
     directory: ''
 }
+
+export let currentSmbSettings: SmbSettings = defaultSmbSettings
 
 export async function ensureSmbSettingsFile() {
     try {
