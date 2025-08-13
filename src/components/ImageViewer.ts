@@ -36,6 +36,15 @@ export class ImageViewer extends HTMLElement {
         this.currentData = dataUrl
         this.showImage(settings)
       });
+
+      // Live-uppdatera UI vid fjärrinställningar
+      window.api.onRemoteSettingsUpdated((settings) => {
+        // Uppdatera endast version-visibility samt passepartout direkt
+        const showVersion = settings.showAppVersion ?? true;
+        this.versionLabel.style.display = showVersion ? 'block' : 'none';
+        this.applyPassepartoutSettings(settings, this.imageLayer1);
+        this.applyPassepartoutSettings(settings, this.imageLayer2);
+      });
     });
   }
 
@@ -72,6 +81,9 @@ export class ImageViewer extends HTMLElement {
 
     // Fetch and display actual app version
     this.updateVersionLabel();
+
+  // Default visibility tills settings finns
+  this.versionLabel.style.display = 'block';
   }
 
   private async updateVersionLabel() {
@@ -153,6 +165,10 @@ export class ImageViewer extends HTMLElement {
     // Applicera passepartout-inställningar på båda lagren
     this.applyPassepartoutSettings(settings, this.imageLayer1);
     this.applyPassepartoutSettings(settings, this.imageLayer2);
+
+  // Visa/dölj versionsetikett baserat på inställningar (default: true)
+  const showVersion = settings.showAppVersion ?? true;
+  this.versionLabel.style.display = showVersion ? 'block' : 'none';
   }
   
   private applyPassepartoutSettings(settings: RemoteSettings, imageElement: HTMLDivElement) {

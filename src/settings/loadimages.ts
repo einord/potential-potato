@@ -13,7 +13,8 @@ export interface RemoteSettings {
 
 export let remoteSettings: RemoteSettings | undefined = undefined
 const defaultRemoteSettings: RemoteSettings = {
-    refreshRate: 60 * 1000, // Default to 60 seconds
+  refreshRate: 60 * 1000, // Default to 60 seconds
+  showAppVersion: true,
 };
 
 let smbClient: SMB2;

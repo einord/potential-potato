@@ -18,6 +18,12 @@
 				"$tsc"
 			],
 			"group": "build"
+		},
+		{
+			"label": "Restart app to verify live settings updates",
+			"type": "shell",
+			"command": "printf 'rs\\n'",
+			"isBackground": false
 		}
 	]
 }

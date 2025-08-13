@@ -21,6 +21,7 @@ let appUpdater: UniversalUpdater | undefined = undefined
 let updaterInterval: NodeJS.Timeout | undefined
 type CachedImage = { dataUrl: string; settings: unknown; fileName: string }
 let cachedImageData: CachedImage | undefined = undefined
+let lastRemoteSettingsJson: string | undefined
 
 const createWindow = async () => {
   // Create the browser window.
@@ -155,6 +156,17 @@ async function loadNextImage() {
     if (imageData) {
       // Cache the image data
       cachedImageData = imageData;
+
+      // Emit remote settings update if changed
+      try {
+        const settingsJson = JSON.stringify(imageData.settings ?? {});
+        if (settingsJson !== lastRemoteSettingsJson) {
+          lastRemoteSettingsJson = settingsJson;
+          mainWindow.webContents.send('remote-settings-updated', imageData.settings);
+        }
+      } catch {
+        // ignore JSON stringify errors
+      }
       
       // Send the image data to the renderer process
       mainWindow.webContents.send('new-image', imageData);
