@@ -1,4 +1,6 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
+import { autoUpdater } from 'electron-updater'
+import log from 'electron-log'
 import path from 'node:path'
 import started from 'electron-squirrel-startup'
 import { currentSmbSettings, ensureSmbSettingsFile, loadSmbSettings, smbSettingsFile } from './settings' // Ensure settings are initialized
@@ -16,7 +18,9 @@ if (started) {
 let mainWindow : BrowserWindow | undefined = undefined
 let timeout = 10
 let appUpdater: UniversalUpdater | undefined = undefined
-let cachedImageData: { dataUrl: string; settings: any; fileName: string } | undefined = undefined
+let updaterInterval: NodeJS.Timeout | undefined
+type CachedImage = { dataUrl: string; settings: unknown; fileName: string }
+let cachedImageData: CachedImage | undefined = undefined
 
 const createWindow = async () => {
   // Create the browser window.
@@ -27,7 +31,8 @@ const createWindow = async () => {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      preload: path.join(__dirname, 'preload.js'),
+  // In production the preload is emitted at .vite/build/preload.js alongside main.js
+  preload: path.join(__dirname, '../preload.js'),
     },
   });
 
@@ -35,7 +40,8 @@ const createWindow = async () => {
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
   } else {
-    mainWindow.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`));
+    // Load from .vite/build/renderer in production where index.html is emitted
+    mainWindow.loadFile(path.join(__dirname, `../renderer/index.html`));
   }
 
   // Open the DevTools.
@@ -52,10 +58,16 @@ const createWindow = async () => {
   mainWindow.webContents.on('did-finish-load', () => {
     mainWindow?.webContents.send('smb-settings-updated', currentSmbSettings)
     
-    // Initialize auto-updater (only in production)
-    if (!MAIN_WINDOW_VITE_DEV_SERVER_URL && mainWindow) {
+  // Initialize auto-updater (only in production)
+  if (!MAIN_WINDOW_VITE_DEV_SERVER_URL && mainWindow) {
       const currentVersion = app.getVersion();
-      appUpdater = new UniversalUpdater(mainWindow, currentVersion, 'einord', 'potential-potato');
+      // Prefer electron-updater on Linux (AppImage) for fully automatic updates
+      if (process.platform === 'linux') {
+        setupElectronUpdater();
+      } else {
+        // Fallback to existing universal updater for non-Linux
+        appUpdater = new UniversalUpdater(mainWindow, currentVersion, 'einord', 'potential-potato');
+      }
     }
   })
 };
@@ -79,6 +91,10 @@ app.on('window-all-closed', () => {
   if (appUpdater) {
     appUpdater.dispose();
     appUpdater = undefined;
+  }
+  if (updaterInterval) {
+    clearInterval(updaterInterval)
+    updaterInterval = undefined
   }
   
   if (process.platform !== 'darwin') {
@@ -142,4 +158,39 @@ async function loadNextImage() {
   } catch (error) {
     console.error('Error loading next image:', error);
   }
+}
+
+// Electron-updater setup for Linux AppImage
+function setupElectronUpdater() {
+  // Configure logger to use electron-log if desired
+  autoUpdater.logger = log;
+  try { log.transports.file.level = 'info'; } catch { /* ignore logger setup errors */ }
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('checking-for-update', () => mainWindow?.webContents.send('update-checking'));
+  autoUpdater.on('update-available', (info: { version: string }) => mainWindow?.webContents.send('update-available', { version: info.version }));
+  autoUpdater.on('update-not-available', (info: { version: string }) => mainWindow?.webContents.send('update-not-available', { version: info.version }));
+  autoUpdater.on('download-progress', (progress: unknown) => mainWindow?.webContents.send('update-download-progress', progress));
+  autoUpdater.on('update-downloaded', () => {
+    // Install shortly after download completes; app relaunch handled by updater
+    setTimeout(() => {
+      autoUpdater.quitAndInstall(false, true);
+    }, 2000);
+  });
+  autoUpdater.on('error', (err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    mainWindow?.webContents.send('update-error', msg);
+  });
+
+  // Initial check and periodic checks hourly (app runs 24/7)
+  autoUpdater.checkForUpdatesAndNotify().catch((err: unknown) => {
+    console.debug('autoUpdater initial check failed', err);
+  });
+  updaterInterval = setInterval(() => {
+    autoUpdater.checkForUpdatesAndNotify().catch((err: unknown) => {
+      console.debug('autoUpdater periodic check failed', err);
+    });
+  }, 60 * 60 * 1000);
 }

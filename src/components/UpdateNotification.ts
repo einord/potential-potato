@@ -59,7 +59,9 @@ export class UpdateNotification extends HTMLElement {
     this.notification.appendChild(progressContainer);
 
     this.progressBar = progressContainer;
-    this.shadowRoot!.appendChild(this.notification);
+    if (this.shadowRoot) {
+      this.shadowRoot.appendChild(this.notification);
+    }
 
     this.setupUpdateListeners();
   }
@@ -74,7 +76,7 @@ export class UpdateNotification extends HTMLElement {
       });
 
       // Update available
-      window.api.updater.onUpdateAvailable((info: any) => {
+      window.api.updater.onUpdateAvailable((info: { version: string }) => {
         this.showNotification(`Update available: v${info.version}`, false);
       });
 
@@ -86,14 +88,14 @@ export class UpdateNotification extends HTMLElement {
       });
 
       // Download progress
-      window.api.updater.onDownloadProgress((progress: any) => {
+      window.api.updater.onDownloadProgress((progress: { percent: number }) => {
         const percent = Math.round(progress.percent);
         this.showNotification(`Downloading update: ${percent}%`, true);
         this.updateProgress(percent);
       });
 
       // Update downloaded
-      window.api.updater.onUpdateDownloaded((info: any) => {
+      window.api.updater.onUpdateDownloaded((info: { version: string }) => {
         this.showNotification(`Update v${info.version} installed! Restarting in 3 seconds...`, false);
       });
 

@@ -1,4 +1,5 @@
 import { RemoteSettings } from "./settings/loadimages";
+import { DownloadProgressInfo, UpdateInfo } from "./types/updater";
 
 export {};
 
@@ -8,11 +9,11 @@ declare global {
       onNewImage(callback: (payload: { dataUrl: string; settings: RemoteSettings }) => void): () => void;
       getCachedImage(): Promise<{ dataUrl: string; settings: RemoteSettings; fileName: string } | null>;
       updater: {
-        onUpdateAvailable(callback: (info: any) => void): () => void;
-        onUpdateNotAvailable(callback: (info: any) => void): () => void;
-        onUpdateDownloaded(callback: (info: any) => void): () => void;
+        onUpdateAvailable(callback: (info: UpdateInfo) => void): () => void;
+        onUpdateNotAvailable(callback: (info: UpdateInfo) => void): () => void;
+        onUpdateDownloaded(callback: (info: UpdateInfo) => void): () => void;
         onUpdateError(callback: (error: string) => void): () => void;
-        onDownloadProgress(callback: (progress: any) => void): () => void;
+        onDownloadProgress(callback: (progress: DownloadProgressInfo) => void): () => void;
         onUpdateChecking(callback: () => void): () => void;
       };
     };

@@ -14,7 +14,10 @@
     "make:rpi": "electron-forge make --arch=arm64 --platform=linux",
     "make:rpi-legacy": "electron-forge make --arch=armv7l --platform=linux",
     "publish": "electron-forge publish",
-    "lint": "eslint --ext .ts,.tsx ."
+    "lint": "eslint --ext .ts,.tsx .",
+    "build:all": "vite build --config vite.main.config.ts && vite build --config vite.preload.config.ts && vite build --config vite.renderer.config.ts",
+    "dist:linux": "pnpm run build:all && electron-builder --linux AppImage --armv7l --arm64",
+    "release:linux": "pnpm run build:all && electron-builder --linux AppImage --armv7l --arm64 --publish always"
   },
   "keywords": [],
   "author": {
@@ -39,19 +42,52 @@
     "@electron/fuses": "^2.0.0",
     "@types/electron-squirrel-startup": "^1.0.2",
     "@types/smb2": "^0.2.4",
-    "@typescript-eslint/eslint-plugin": "^5.62.0",
-    "@typescript-eslint/parser": "^5.62.0",
+  "@typescript-eslint/eslint-plugin": "^8.6.0",
+  "@typescript-eslint/parser": "^8.6.0",
     "electron": "37.2.5",
+    "electron-builder": "^24.13.3",
     "eslint": "^8.57.1",
     "eslint-import-resolver-typescript": "^4.4.4",
     "eslint-plugin-import": "^2.32.0",
-    "typescript": "~4.5.4",
+    "typescript": "^5.4.5",
+    "@types/node": "^20.11.30",
     "vite": "^5.4.19"
   },
   "dependencies": {
     "chokidar": "^4.0.3",
     "electron-log": "^5.4.2",
     "electron-squirrel-startup": "^1.0.1",
+    "electron-updater": "^6.1.7",
     "v9u-smb2": "^1.0.6"
+  },
+  "build": {
+    "appId": "se.plik.potentialpotato",
+    "productName": "potential-potato",
+    "directories": {
+      "output": "dist_electron"
+    },
+    "files": [
+      "package.json",
+  ".vite/build/**"
+    ],
+    "extraMetadata": {
+      "main": ".vite/build/main.js"
+    },
+    "linux": {
+      "target": [
+        { "target": "AppImage", "arch": ["armv7l", "arm64"] }
+      ],
+      "category": "Utility",
+      "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "einord",
+        "repo": "potential-potato",
+        "releaseType": "release"
+      }
+    ]
   }
+  
 }
