@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   build-linux:
-    name: Build Linux artifacts (arm64 + armv7l)
+    name: Build Linux AppImage artifacts (arm64 + armv7l)
     if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
     runs-on: ubuntu-latest
     outputs:
@@ -77,23 +77,14 @@ jobs:
           echo "Effective build version:"
           cat package.json | jq '.version'
 
-      - name: Install rpm tooling
-        run: |
-          sudo apt-get install -y rpm
-
       - name: Build (renderer + main/preload)
         run: npm run build
 
-      - name: Package arm64 (AppImage, deb, rpm)
-        run: npx electron-builder --linux AppImage deb rpm --arm64
+      - name: Package arm64 AppImage
+        run: npx electron-builder --linux AppImage --arm64
 
-      - name: Package armv7l (AppImage, deb, rpm; allow rpm failure)
-        run: |
-          set -e
-          npx electron-builder --linux AppImage deb rpm --armv7l || {
-            echo "armv7l rpm failed, retry without rpm"
-            npx electron-builder --linux AppImage deb --armv7l
-          }
+      - name: Package armv7l AppImage
+        run: npx electron-builder --linux AppImage --armv7l
 
       - name: List artifacts
         run: ls -1 dist || true
@@ -104,8 +95,6 @@ jobs:
           name: linux-artifacts-${{ steps.ver.outputs.version }}
           path: |
             dist/*linux-*.AppImage
-            dist/*linux-*.deb
-            dist/*linux-*.rpm
           if-no-files-found: error
 
   release:
