@@ -1,7 +1,7 @@
 {
   "name": "potential-potato",
   "productName": "potential-potato",
-  "version": "1.0.4",
+  "version": "0.0.0",
   "description": "My Electron application description",
   "main": ".vite/build/main.js",
   "scripts": {
