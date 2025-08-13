@@ -18,6 +18,7 @@
   "dist:mac": "npm run build && electron-builder --mac",
   "dist:linux:arm64": "npm run build && electron-builder --linux AppImage deb rpm --arm64",
   "dist:linux:armv7l": "npm run build && electron-builder --linux AppImage deb rpm --armv7l",
+  "dist:linux:armv7l-local": "npm run build && electron-builder --linux AppImage deb --armv7l",
   "dist:linux:dir:arm64": "npm run build && electron-builder --linux dir --arm64",
   "dist:linux:dir:armv7l": "npm run build && electron-builder --linux dir --armv7l",
     "clean": "rimraf dist dist-electron"
