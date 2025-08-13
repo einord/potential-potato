@@ -49,11 +49,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.ver.outputs.version }}
         run: |
-          if gh release view "$VERSION" >/dev/null 2>&1; then
+          if gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release $VERSION already exists."
           else
             # Create release; this will create the tag via GitHub API without using git
             gh release create "$VERSION" \
+              --repo "$GITHUB_REPOSITORY" \
               --target main \
               --title "Potential Potato $VERSION" \
               --notes "Automated release $VERSION"
@@ -123,4 +124,4 @@ jobs:
             exit 1
           fi
           echo "Uploading: ${FILES[*]}"
-          gh release upload "$VERSION" "${FILES[@]}" --
+          gh release upload "$VERSION" "${FILES[@]}" --repo "$GITHUB_REPOSITORY" --
