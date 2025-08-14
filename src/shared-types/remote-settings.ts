@@ -8,8 +8,8 @@ export interface RemoteSettings {
 
 export const defaultRemoteSettings: RemoteSettings = {
     refreshRate: 20000,
-    transitionDuration: 500,
-    passepartoutColor: 'green',
+    transitionDuration: 0,
+    passepartoutColor: '#222',
     passepartoutWidth: 150,
     showAppVersion: true
 }

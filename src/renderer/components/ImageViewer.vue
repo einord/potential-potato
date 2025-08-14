@@ -8,6 +8,7 @@ const currentImage = ref<1 | 2>(1)
 const currentSettings = ref<RemoteSettings>(defaultRemoteSettings)
 
 const stylePassepartoutColor = computed(() => currentSettings.value.passepartoutColor)
+const styleImageWidthHeight = computed(() => `calc(100% - ${currentSettings.value.passepartoutWidth}px - ${currentSettings.value.passepartoutWidth}px)`)
 const styleImageTransition = computed(() => `opacity ${currentSettings.value.transitionDuration}ms ease-in-out;`)
 const styleImage1Url = ref(`url('${defaultImageUrl}')`)
 const styleImage2Url = ref(`none`)
@@ -58,13 +59,14 @@ onMounted(() => {
     > .image {
         position: absolute;
         overflow: hidden;
-        height: 100%;
-        width: 100%;
+        height: v-bind(styleImageWidthHeight);
+        width: v-bind(styleImageWidthHeight);
         transition: v-bind(styleImageTransition);
         background-position: center;
         background-size: cover;
         opacity: 0;
         margin: v-bind(styleImageMargin);
+        outline: 10px solid hsla(0, 100%, 0%, 0.2);
 
         &.layer-1 {
             opacity: v-bind(styleImage1Opacity);
