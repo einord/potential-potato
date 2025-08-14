@@ -1,7 +1,6 @@
 <template>
   <main class="container">
-    <h1>Hello world</h1>
-    <p>Welcome to Potential Potato (Electron + Vue + Vite)</p>
+    <ImageViewer />
 
     <!-- Felruta nere till vänster -->
     <div v-if="errShow" class="toast toast--error">
@@ -23,6 +22,7 @@
 import { onMounted, onUnmounted, ref } from 'vue'
 import Toast from './components/Toast.vue'
 import UpdaterToast from './components/UpdaterToast.vue'
+import ImageViewer from './components/ImageViewer.vue'
 
 const versionToast = ref<InstanceType<typeof Toast> | null>(null)
 
