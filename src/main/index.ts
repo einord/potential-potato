@@ -11,8 +11,8 @@ async function createWindow() {
     height: 700,
     webPreferences: {
       contextIsolation: true,
-      preload: join(__dirname, '../preload/index.js')
-    }
+      preload: join(__dirname, '../preload/index.js'),
+    },
   })
 
   // Initialize updater once the window exists
@@ -28,12 +28,12 @@ async function createWindow() {
       submenu: [
         {
           label: 'Sök efter uppdatering nu',
-          click: () => updater?.checkNow()
+          click: () => updater?.checkNow(),
         },
         { type: 'separator' },
-        { role: 'quit', label: 'Avsluta' }
-      ]
-    }
+        { role: 'quit', label: 'Avsluta' },
+      ],
+    },
   ] as Electron.MenuItemConstructorOptions[]
   const menu = Menu.buildFromTemplate(template)
   Menu.setApplicationMenu(menu)
@@ -57,4 +57,8 @@ app.on('before-quit', () => {
   updater?.dispose()
 })
 
-app.whenReady().then(createWindow)
+app.whenReady().then(async () => {
+  // IPC for renderer to fetch current app version
+  ipcMain.handle('get-app-version', () => app.getVersion())
+  await createWindow()
+})

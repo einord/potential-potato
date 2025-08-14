@@ -1,14 +1,22 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron'
 
-interface UpdateInfo { version: string }
-interface UpdateError { message: string }
-interface DownloadProgress { percent: number }
-interface RestartingInfo { secondsRemaining: number }
+interface UpdateInfo {
+  version: string
+}
+interface UpdateError {
+  message: string
+}
+interface DownloadProgress {
+  percent: number
+}
+interface RestartingInfo {
+  secondsRemaining: number
+}
 
 contextBridge.exposeInMainWorld('api', {
   ping: () => 'pong',
-  // Provide a simple method to fetch the application version from main process
-  getVersion: (): Promise<string> => ipcRenderer.invoke('get-version'),
+  // Provide the application version to renderer
+  getVersion: (): Promise<string> => ipcRenderer.invoke('get-app-version'),
   updater: {
     onUpdateChecking: (cb: () => void) => {
       const w = () => cb()
@@ -44,6 +52,6 @@ contextBridge.exposeInMainWorld('api', {
       const w = (_e: IpcRendererEvent, info: RestartingInfo) => cb(info)
       ipcRenderer.on('update-restarting', w)
       return () => ipcRenderer.removeListener('update-restarting', w)
-    }
-  }
+    },
+  },
 })

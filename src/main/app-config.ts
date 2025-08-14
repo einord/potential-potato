@@ -4,4 +4,3 @@
 // GitHub repo to check for updates (format: "owner/repo").
 // Change this to your actual repository.
 export const UPDATE_REPO = 'einord/potential-potato'
-

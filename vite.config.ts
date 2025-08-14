@@ -4,7 +4,7 @@ import electron from 'vite-plugin-electron'
 import renderer from 'vite-plugin-electron-renderer'
 import { resolve } from 'node:path'
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(() => {
   return {
     root: '.',
     plugins: [
@@ -22,10 +22,10 @@ export default defineConfig(({ mode }) => {
               rollupOptions: {
                 // Don't bundle native/electron-specific deps in main process
                 external: ['electron-log'],
-                output: { entryFileNames: 'index.js' }
-              }
-            }
-          }
+                output: { entryFileNames: 'index.js' },
+              },
+            },
+          },
         },
         {
           entry: 'src/preload/index.ts',
@@ -33,21 +33,21 @@ export default defineConfig(({ mode }) => {
             build: {
               outDir: 'dist-electron/preload',
               lib: { entry: 'src/preload/index.ts', formats: ['cjs'] },
-              rollupOptions: { output: { entryFileNames: 'index.js' } }
-            }
-          }
-        }
+              rollupOptions: { output: { entryFileNames: 'index.js' } },
+            },
+          },
+        },
       ]),
-      renderer()
+      renderer(),
     ],
     build: {
       outDir: 'dist',
       rollupOptions: {
-        input: resolve(__dirname, 'index.html')
-      }
+        input: resolve(__dirname, 'index.html'),
+      },
     },
     server: {
-      port: 5173
-    }
+      port: 5173,
+    },
   }
 })
