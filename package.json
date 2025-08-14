@@ -25,21 +25,22 @@
     "clean": "rimraf dist dist-electron"
   },
   "dependencies": {
-    "vue": "^3.5.10",
-    "electron-log": "^5.1.4"
+    "electron-log": "^5.1.4",
+    "v9u-smb2": "^1.0.6",
+    "vue": "^3.5.10"
   },
   "devDependencies": {
     "@types/node": "^20.14.12",
-    "@vitejs/plugin-vue": "^5.1.2",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
+    "@vitejs/plugin-vue": "^5.1.2",
     "@vue/eslint-config-typescript": "^13.0.0",
+    "electron": "^28.3.3",
+    "electron-builder": "^24.13.3",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-vue": "^9.27.0",
     "prettier": "^3.3.3",
-    "electron": "^28.3.3",
-    "electron-builder": "^24.13.3",
     "rimraf": "^6.0.1",
     "typescript": "^5.5.4",
     "vite": "^5.4.2",
