@@ -1,0 +1,18 @@
+{
+  "root": true,
+  "env": { "es2022": true, "browser": true, "node": true },
+  "parser": "vue-eslint-parser",
+  "parserOptions": {
+    "parser": "@typescript-eslint/parser",
+    "ecmaVersion": 2022,
+    "sourceType": "module",
+    "extraFileExtensions": [".vue"]
+  },
+  "extends": ["plugin:vue/vue3-recommended", "plugin:@typescript-eslint/recommended", "prettier"],
+  "rules": {
+    "vue/multi-word-component-names": "off",
+    "@typescript-eslint/no-explicit-any": "off",
+    "@typescript-eslint/ban-ts-comment": "off"
+  },
+  "ignorePatterns": ["dist", "dist-electron", "node_modules", "old"]
+}
