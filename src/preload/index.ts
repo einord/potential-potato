@@ -7,6 +7,8 @@ interface RestartingInfo { secondsRemaining: number }
 
 contextBridge.exposeInMainWorld('api', {
   ping: () => 'pong',
+  // Provide a simple method to fetch the application version from main process
+  getVersion: (): Promise<string> => ipcRenderer.invoke('get-version'),
   updater: {
     onUpdateChecking: (cb: () => void) => {
       const w = () => cb()
