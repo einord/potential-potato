@@ -1,41 +1,38 @@
 <script setup lang="ts">
 import { defaultRemoteSettings, RemoteSettings } from '../../shared-types/remote-settings';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 
-const defaultImageUrl = 'https://wallpapercave.com/wp/9gAmpUH.jpg' // Get cached image and fallback on this url
+const currentImage1Data = ref('https://wallpapercave.com/wp/9gAmpUH.jpg') // Get cached image and fallback on this url
+const currentImage2Data = ref('https://eskipaper.com/images/background-images-7.jpg') // Get cached image and fallback on this url
 const currentImage = ref<1 | 2>(1)
 
-const currentSettings = ref<RemoteSettings>(defaultRemoteSettings)
+const currentSettings = reactive<RemoteSettings>(defaultRemoteSettings)
 
-const stylePassepartoutColor = computed(() => currentSettings.value.passepartoutColor)
-const styleImageWidthHeight = computed(() => `calc(100% - ${currentSettings.value.passepartoutWidth}px - ${currentSettings.value.passepartoutWidth}px)`)
-const styleImageTransition = computed(() => `opacity ${currentSettings.value.transitionDuration}ms ease-in-out;`)
-const styleImage1Url = ref(`url('${defaultImageUrl}')`)
-const styleImage2Url = ref(`url('${defaultImageUrl}')`)
+const stylePassepartoutColor = computed(() => currentSettings.passepartoutColor)
+const styleImageWidthHeight = computed(() => `calc(100% - ${currentSettings.passepartoutWidth}px - ${currentSettings.passepartoutWidth}px)`)
+const styleImageTransition = computed(() => `opacity ${currentSettings.transitionDuration ?? 0}ms ease-in-out`)
+const image1Url = computed(() => `url('${currentImage1Data.value}')`)
+const image2Url = computed(() => `url('${currentImage2Data.value}')`)
 const styleImage1Opacity = computed(() => currentImage.value === 1 ? 1 : 0)
 const styleImage2Opacity = computed(() => currentImage.value === 2 ? 1 : 0)
-const styleImageMargin = computed(() => `${currentSettings.value.passepartoutWidth}px`)
+const styleImageMargin = computed(() => `${currentSettings.passepartoutWidth}px`)
 
 onMounted(() => {
     // Set updated remote settings when they change
     const onRemoteSettingsUpdated = window.api?.onRemoteSettingsUpdated
     if (onRemoteSettingsUpdated) {
-        onRemoteSettingsUpdated(settings => currentSettings.value = Object.assign({}, defaultRemoteSettings, settings))
+        onRemoteSettingsUpdated(settings => Object.assign(currentSettings, defaultRemoteSettings, settings))
     }
 
     const onNewImage = window.api?.onNewImage
     if (onNewImage) {
         onNewImage(dataUrl => {
             // Set the background image for the next layer, and switch to it
-            const newData = `url('${dataUrl}')`
-            console.log('New image received:', dataUrl)
             if (currentImage.value === 1) {
-                console.log('Previous value:', styleImage2Url.value)
-                styleImage2Url.value = newData
+                currentImage2Data.value = dataUrl
                 currentImage.value = 2
             } else {
-                console.log('Previous value:', styleImage1Url.value)
-                styleImage1Url.value = newData
+                currentImage1Data.value = dataUrl
                 currentImage.value = 1
             }
         })
@@ -46,8 +43,8 @@ onMounted(() => {
 
 <template>
     <div class="image-viewer">
-        <div class="image layer-1"></div>
-        <div class="image layer-2"></div>
+        <div class="image image-1" :style="{ backgroundImage: image1Url }"></div>
+        <div class="image image-2" :style="{ backgroundImage: image2Url }"></div>
     </div>
 </template>
 
@@ -72,14 +69,12 @@ onMounted(() => {
         margin: v-bind(styleImageMargin);
         outline: 10px solid hsla(0, 100%, 0%, 0.2);
 
-        &.layer-1 {
+        &.image-1 {
             opacity: v-bind(styleImage1Opacity);
-            background-image: v-bind(styleImage1Url);
         }
 
-        &.layer-2 {
+        &.image-2 {
             opacity: v-bind(styleImage2Opacity);
-            background-image: v-bind(styleImage2Url);
         }
     }
 }

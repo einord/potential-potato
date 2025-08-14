@@ -17,7 +17,7 @@ const userDataPath = app.getPath('userData')
 export const smbSettingsFile = join(userDataPath, 'pp-smb.json')
 export let currentSmbSettings: SmbSettings = defaultSmbSettings
 let cachedImageData: CachedImage | undefined = undefined
-let refreshTimer: NodeJS.Timeout | string | number | undefined
+let refreshTimer: NodeJS.Timeout | undefined
 let timeout = 10
 
 export let remoteSettings: RemoteSettings | undefined = undefined
@@ -60,18 +60,18 @@ export function watchSmbSettingsFile(mainWindow: BrowserWindow) {
     watcher.on('change', async () => {
         console.log(`SMB settings file changed: ${smbSettingsFile}. Reloading SMB settings...`);
         await loadSmbSettings();
-        setRefreshTimer();
+        setRefreshTimer(mainWindow);
         mainWindow.webContents.send('smb-settings-updated', currentSmbSettings);
     });
 }
 
-function setRefreshTimer() {
+function setRefreshTimer(mainWindow: BrowserWindow) {
     if (refreshTimer) {
         clearInterval(refreshTimer);
     }
 
     timeout = getTimeoutFromRefreshRate(remoteSettings?.refreshRate)
-    refreshTimer = setInterval(loadNextImage, timeout)
+    refreshTimer = setInterval(() => loadNextImage(mainWindow), timeout)
     console.log(`Refresh timer set to ${timeout} milliseconds`);
 }
 
@@ -110,11 +110,11 @@ export async function loadNextImage(mainWindow: BrowserWindow) {
 
     if(getTimeoutFromRefreshRate(remoteSettings?.refreshRate) != timeout) {
       console.log('Remote timer settings changed, resetting refresh timer.');
-      setRefreshTimer()
+      setRefreshTimer(mainWindow)
     }
   } catch (error) {
     console.error('Error loading next image:', error);
-    setRefreshTimer();
+    setRefreshTimer(mainWindow);
   }
 }
 
