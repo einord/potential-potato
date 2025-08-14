@@ -1,30 +1,12 @@
-<template>
-  <main class="container">
-    <ImageViewer />
-
-    <!-- Felruta nere till vänster -->
-    <div v-if="errShow" class="toast toast--error">
-      <p class="title">Fel vid uppdatering</p>
-      <p class="detail">{{ errMessage }}</p>
-    </div>
-
-    <!-- Uppdaterings-toast uppe till höger -->
-    <UpdaterToast />
-
-    <!-- Version badge bottom-right -->
-    <Toast ref="versionToast" position="bottomRight">
-      v{{ appVersion }}
-    </Toast>
-  </main>
-</template>
-
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, onUnmounted, reactive, ref } from 'vue'
 import Toast from './components/Toast.vue'
 import UpdaterToast from './components/UpdaterToast.vue'
 import ImageViewer from './components/ImageViewer.vue'
+import { defaultRemoteSettings, RemoteSettings } from '../shared-types/remote-settings'
 
 const versionToast = ref<InstanceType<typeof Toast> | null>(null)
+const currentSettings = reactive<RemoteSettings>(defaultRemoteSettings)
 
 // Error toast state (auto-hide after 20s)
 const errShow = ref(false)
@@ -59,6 +41,21 @@ onMounted(async () => {
     }
   } catch {}
 
+    // Set updated remote settings when they change
+    const onRemoteSettingsUpdated = window.api?.onRemoteSettingsUpdated
+    if (onRemoteSettingsUpdated) {
+        onRemoteSettingsUpdated(settings => {
+          Object.assign(currentSettings, defaultRemoteSettings, settings)
+
+          // Hide / show the app version depending on settings
+          if (currentSettings.showAppVersion === true) {
+              versionToast.value?.show()
+          } else {
+              versionToast.value?.hide()
+          }
+      })
+    }
+
   const u = window.api?.updater
   if (u?.onUpdateError) {
     offs.push(
@@ -73,6 +70,26 @@ onMounted(async () => {
   })
 })
 </script>
+
+<template>
+  <main class="container">
+    <ImageViewer />
+
+    <!-- Felruta nere till vänster -->
+    <div v-if="errShow" class="toast toast--error">
+      <p class="title">Fel vid uppdatering</p>
+      <p class="detail">{{ errMessage }}</p>
+    </div>
+
+    <!-- Uppdaterings-toast uppe till höger -->
+    <UpdaterToast />
+
+    <!-- Version badge bottom-right -->
+    <Toast ref="versionToast" position="bottomRight">
+      v{{ appVersion }}
+    </Toast>
+  </main>
+</template>
 
 <style scoped>
 .container {

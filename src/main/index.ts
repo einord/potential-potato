@@ -1,7 +1,7 @@
 import { app, BrowserWindow, Menu, ipcMain } from 'electron'
 import { join } from 'node:path'
 import { Updater } from './updater'
-import { ensureSmbSettingsFile, loadNextImage, loadSmbSettings, watchSmbSettingsFile } from './load-images'
+import { cachedImageData, ensureSmbSettingsFile, loadNextImage, loadSmbSettings, watchSmbSettingsFile } from './load-images'
 
 let mainWindow: BrowserWindow | null = null
 let updater: Updater | null = null
@@ -69,5 +69,11 @@ app.on('before-quit', () => {
 app.whenReady().then(async () => {
   // IPC for renderer to fetch current app version
   ipcMain.handle('get-app-version', () => app.getVersion())
+
+  ipcMain.handle('get-cached-image', () => {
+    console.log('Cached image requested, returning:', cachedImageData ? 'cached data' : 'no cache');
+    return cachedImageData;
+  });
+
   await createWindow()
 })

@@ -2,8 +2,8 @@
 import { defaultRemoteSettings, RemoteSettings } from '../../shared-types/remote-settings';
 import { computed, onMounted, reactive, ref } from 'vue';
 
-const currentImage1Data = ref('https://wallpapercave.com/wp/9gAmpUH.jpg') // Get cached image and fallback on this url
-const currentImage2Data = ref('https://eskipaper.com/images/background-images-7.jpg') // Get cached image and fallback on this url
+const currentImage1Data = ref<string>()
+const currentImage2Data = ref<string>()
 const currentImage = ref<1 | 2>(1)
 
 const currentSettings = reactive<RemoteSettings>(defaultRemoteSettings)
@@ -18,6 +18,12 @@ const styleImage2Opacity = computed(() => currentImage.value === 2 ? 1 : 0)
 const styleImageMargin = computed(() => `${currentSettings.passepartoutWidth}px`)
 
 onMounted(() => {
+    window.api?.getCachedImage().then(data => {
+        if (currentImage1Data.value == null) {
+            currentImage1Data.value = data?.dataUrl ?? 'https://wallpapercave.com/wp/9gAmpUH.jpg'
+        }
+    })
+
     // Set updated remote settings when they change
     const onRemoteSettingsUpdated = window.api?.onRemoteSettingsUpdated
     if (onRemoteSettingsUpdated) {

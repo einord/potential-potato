@@ -16,7 +16,7 @@ export interface CachedImage {
 const userDataPath = app.getPath('userData')
 export const smbSettingsFile = join(userDataPath, 'pp-smb.json')
 export let currentSmbSettings: SmbSettings = defaultSmbSettings
-let cachedImageData: CachedImage | undefined = undefined
+export let cachedImageData: CachedImage | undefined = undefined
 let refreshTimer: NodeJS.Timeout | undefined
 let timeout = 10
 
