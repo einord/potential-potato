@@ -1,14 +1,16 @@
 import { app, BrowserWindow, Menu, ipcMain } from 'electron'
 import { join } from 'node:path'
 import { Updater } from './updater'
+import { cachedImageData, ensureSmbSettingsFile, loadNextImage, loadSmbSettings, watchSmbSettingsFile } from './load-images'
 
-let win: BrowserWindow | null = null
+let mainWindow: BrowserWindow | null = null
 let updater: Updater | null = null
 
 async function createWindow() {
-  win = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1000,
     height: 700,
+    fullscreen: app.isPackaged, // Only automatically fullscreen in packaged app
     webPreferences: {
       contextIsolation: true,
       preload: join(__dirname, '../preload/index.js'),
@@ -16,7 +18,7 @@ async function createWindow() {
   })
 
   // Initialize updater once the window exists
-  updater = new Updater(win, app.getVersion())
+  updater = new Updater(mainWindow, app.getVersion())
 
   // IPC: expose application version to renderer
   ipcMain.handle('get-version', () => app.getVersion())
@@ -39,13 +41,20 @@ async function createWindow() {
   Menu.setApplicationMenu(menu)
 
   if (process.env.VITE_DEV_SERVER_URL) {
-    await win.loadURL(process.env.VITE_DEV_SERVER_URL)
+    await mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
     if (!app.isPackaged) {
-      win.webContents.openDevTools({ mode: 'detach' })
+      mainWindow.webContents.openDevTools({ mode: 'detach' })
     }
   } else {
-    await win.loadFile(join(__dirname, '../../dist/index.html'))
+    await mainWindow.loadFile(join(__dirname, '../../dist/index.html'))
   }
+
+  // Ensure and load settings
+  await ensureSmbSettingsFile()
+  await loadSmbSettings()
+  watchSmbSettingsFile(mainWindow)
+  
+  await loadNextImage(mainWindow)
 }
 
 app.on('window-all-closed', () => {
@@ -60,5 +69,11 @@ app.on('before-quit', () => {
 app.whenReady().then(async () => {
   // IPC for renderer to fetch current app version
   ipcMain.handle('get-app-version', () => app.getVersion())
+
+  ipcMain.handle('get-cached-image', () => {
+    console.log('Cached image requested, returning:', cachedImageData ? 'cached data' : 'no cache');
+    return cachedImageData;
+  });
+
   await createWindow()
 })

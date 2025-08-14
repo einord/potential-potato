@@ -3,7 +3,6 @@ import log from 'electron-log'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import * as fs from 'node:fs'
-import { spawn } from 'node:child_process'
 import { UPDATE_REPO as BUILT_IN_UPDATE_REPO } from './app-config'
 
 interface GitHubRelease {
@@ -13,11 +12,19 @@ interface GitHubRelease {
   assets?: Array<{ name: string; browser_download_url: string; size: number }>
 }
 
+/**
+ * Handles update checking, downloading and platform-specific relaunch logic.
+ */
 export class Updater {
+  /** Reference to the main BrowserWindow to send IPC events to renderer. */
   private mainWindow: BrowserWindow
+  /** Interval handle for periodic update checks. */
   private updateCheckInterval: NodeJS.Timeout | null = null
+  /** Current application version (from app.getVersion()). */
   private currentVersion: string
+  /** GitHub owner (from config/env). */
   private owner: string | null
+  /** GitHub repo name (from config/env). */
   private repo: string | null
 
   // Linux AppImage management
@@ -30,6 +37,9 @@ export class Updater {
   )
   private readonly PRODUCT_PREFIX = 'Potential-Potato-'
 
+  /**
+   * Creates a new Updater bound to a main window and the current app version.
+   */
   constructor(mainWindow: BrowserWindow, currentVersion: string) {
     this.mainWindow = mainWindow
     this.currentVersion = currentVersion
@@ -58,6 +68,10 @@ export class Updater {
     this.setup()
   }
 
+  /**
+   * Sets up autostart/symlink housekeeping on Linux, triggers an initial
+   * update check and schedules hourly checks.
+   */
   private setup(): void {
     // Linux housekeeping: ensure autostart, update symlink, cleanup old versions
     if (process.platform === 'linux') {
@@ -98,6 +112,9 @@ export class Updater {
     )
   }
 
+  /**
+   * Disposes timer resources used by the updater.
+   */
   public dispose(): void {
     if (this.updateCheckInterval) {
       clearInterval(this.updateCheckInterval)
@@ -106,10 +123,17 @@ export class Updater {
   }
 
   // Public method to trigger an immediate update check
+  /**
+   * Checks for updates immediately (manual trigger).
+   */
   public async checkNow(): Promise<void> {
     await this.checkForUpdates()
   }
 
+  /**
+   * Checks GitHub Releases for a newer version and kicks off a download
+   * flow when appropriate. Emits progress and status events to renderer.
+   */
   private async checkForUpdates(): Promise<void> {
     try {
       if (!this.owner || !this.repo) return
@@ -184,6 +208,9 @@ export class Updater {
   }
 
   // Simple semver-like comparison: 1.2.3 vs 1.2.10
+  /**
+   * Compares two semver-like version strings. Returns true if latest > current.
+   */
   private isNewerVersion(latest: string, current: string): boolean {
     const latestParts = latest.split('.').map(Number)
     const currentParts = current.split('.').map(Number)
@@ -197,12 +224,18 @@ export class Updater {
     return false
   }
 
+  /**
+   * Sends an IPC message to the renderer if the window is still alive.
+   */
   private sendToRenderer(channel: string, data?: unknown): void {
     if (!this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send(channel, data)
     }
   }
 
+  /**
+   * Picks the most suitable release asset for the current platform/arch.
+   */
   private findAssetForPlatform(release: GitHubRelease) {
     const assets = release.assets || []
     const plat = process.platform
@@ -228,6 +261,9 @@ export class Updater {
     return null
   }
 
+  /**
+   * Maps Node's process.arch to expected AppImage arch naming.
+   */
   private getLinuxAppImageArch(): string {
     // Map Node.js arch to electron-builder artifact arch names
     // x64 -> x86_64, arm64 -> arm64 (aarch64 in some cases), arm -> armv7l
@@ -238,6 +274,10 @@ export class Updater {
     return a
   }
 
+  /**
+   * Downloads the given asset with retry and resume support, emitting
+   * progress updates. Performs platform-specific post-download handling.
+   */
   private async downloadAssetWithProgress(asset: {
     name: string
     browser_download_url: string
@@ -415,6 +455,10 @@ export class Updater {
   private _pendingLinuxAppImageLink: string | null = null
   private _pendingLinuxAppImagePath: string | null = null
 
+  /**
+   * Shows a countdown and restarts the app into the newly downloaded binary.
+   * On Linux we relaunch with an explicit execPath (symlink or direct file).
+   */
   private scheduleRestartCountdown(seconds: number, onZero?: () => void) {
     let remaining = seconds
     const tick = setInterval(() => {
@@ -437,14 +481,12 @@ export class Updater {
               if (pending && target && path.resolve(target) !== path.resolve(pending)) {
                 // Try to repoint the link
                 try {
-                  try {
-                    fs.unlinkSync(link)
-                  } catch {}
+                  try { fs.unlinkSync(link) } catch {}
                   fs.symlinkSync(pending, link)
                   fs.chmodSync(link, 0o755)
                   log.info(`Symlink repointed ${link} -> ${pending}`)
                 } catch (e) {
-                  log.warn('Failed to repoint symlink, will launch direct file', e)
+                  log.warn('Failed to repoint symlink, will use direct file', e)
                 }
               }
               // Prefer using symlink after attempt to repoint
@@ -457,22 +499,17 @@ export class Updater {
             }
 
             if (!launchPath) {
-              log.error(
-                'No launch path available for AppImage (symlink/file missing). Aborting restart.'
-              )
-              this.sendToRenderer(
-                'update-error',
-                'Kunde inte starta den nya versionen (fil saknas).'
-              )
+              log.error('No launch path available for AppImage (symlink/file missing). Aborting restart.')
+              this.sendToRenderer('update-error', 'Kunde inte starta den nya versionen (fil saknas).')
               return
             }
             try {
-              const child = spawn(launchPath, [], { detached: true, stdio: 'ignore' })
-              child.unref()
+              log.info(`Relaunching app with execPath=${launchPath}`)
+              app.relaunch({ execPath: launchPath })
               app.exit(0)
               return
             } catch (e) {
-              log.error('Failed to launch AppImage', e)
+              log.error('Failed to relaunch AppImage', e)
               this.sendToRenderer('update-error', 'Kunde inte starta den nya versionen.')
               return
             }
@@ -492,6 +529,9 @@ export class Updater {
   }
 
   // ----- Linux helpers -----
+  /**
+   * Returns an arch hint string to match artifact filenames in ~/Applications.
+   */
   private getArchHint(): string {
     if (process.arch === 'arm') return 'armv7l'
     if (process.arch === 'arm64') return 'arm64'
@@ -499,6 +539,9 @@ export class Updater {
     return process.arch
   }
 
+  /**
+   * Lists local AppImage files for this product, with parsed version and mtime.
+   */
   private listAppImages(): { file: string; version: string; mtime: number }[] {
     try {
       fs.mkdirSync(this.LINUX_APP_DIR, { recursive: true })
@@ -516,6 +559,9 @@ export class Updater {
       })
   }
 
+  /**
+   * Sort comparator for versions in descending order (newest first).
+   */
   private semverCompareDesc(a: string, b: string): number {
     const ap = a.split('.').map((n) => parseInt(n, 10))
     const bp = b.split('.').map((n) => parseInt(n, 10))
@@ -528,6 +574,9 @@ export class Updater {
     return 0
   }
 
+  /**
+   * Sorts a set of AppImage descriptors by version then mtime (desc).
+   */
   private sortedByNewest(files: { file: string; version: string; mtime: number }[]) {
     return files.sort((x, y) => {
       const byVer = this.semverCompareDesc(x.version, y.version)
@@ -536,6 +585,9 @@ export class Updater {
     })
   }
 
+  /**
+   * Updates ~/.local/bin/potential-potato to point to the newest AppImage.
+   */
   private updateSymlinkToLatest(): void {
     if (process.platform !== 'linux') return
     const all = this.sortedByNewest(this.listAppImages())
@@ -557,6 +609,9 @@ export class Updater {
     }
   }
 
+  /**
+   * Reads a symlink and resolves a relative target to an absolute path.
+   */
   private _readlinkSafe(linkPath: string): string | null {
     try {
       const target = fs.readlinkSync(linkPath)
@@ -570,11 +625,17 @@ export class Updater {
     }
   }
 
+  /**
+   * Returns true if the symlink at linkPath points to an existing file.
+   */
   private _symlinkTargetExists(linkPath: string): boolean {
     const target = this._readlinkSafe(linkPath)
     return !!(target && fs.existsSync(target))
   }
 
+  /**
+   * Checks if a filename looks like this product's AppImage (name + extension).
+   */
   private isProductAppImage(name: string): boolean {
     const n = name.toLowerCase()
     const startsOk =
@@ -584,6 +645,10 @@ export class Updater {
     return startsOk && n.endsWith('.appimage')
   }
 
+  /**
+   * Ensures ~/.config/autostart/potential-potato.desktop exists and points
+   * to the stable symlink so the app auto-starts on login.
+   */
   private ensureAutostartDesktop(): void {
     if (process.platform !== 'linux') return
     try {
@@ -611,6 +676,9 @@ export class Updater {
     }
   }
 
+  /**
+   * Deletes older AppImage files, keeping the 'keep' newest and the running one.
+   */
   private cleanupOldAppImages(keep = 2): void {
     if (process.platform !== 'linux') return
     const currentExec = process.execPath
@@ -628,6 +696,9 @@ export class Updater {
   }
 
   // Clean up AppImage files keeping only the provided absolute paths (if they exist) and the running binary
+  /**
+   * Deletes all AppImage files except the provided keepPaths and the running one.
+   */
   private cleanupAppImagesKeep(keepPaths: string[]): void {
     if (process.platform !== 'linux') return
     const keepResolved = new Set(keepPaths.filter(Boolean).map((p) => path.resolve(p)))

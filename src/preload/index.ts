@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron'
+import { RemoteSettings } from 'src/shared-types/remote-settings'
 
 interface UpdateInfo {
   version: string
@@ -17,6 +18,26 @@ contextBridge.exposeInMainWorld('api', {
   ping: () => 'pong',
   // Provide the application version to renderer
   getVersion: (): Promise<string> => ipcRenderer.invoke('get-app-version'),
+
+  /** Remote settings updated */
+  onRemoteSettingsUpdated: (callback: (settings: RemoteSettings) => void) => {
+    const wrapper = (_event: IpcRendererEvent, settings: RemoteSettings) => callback(settings);
+    ipcRenderer.on('remote-settings-updated', wrapper);
+    return () => ipcRenderer.removeListener('remote-settings-updated', wrapper);
+  },
+
+  /** New image available */
+  onNewImage: (callback: (dataUrl: string) => void) => {
+    const wrapper = (_event: IpcRendererEvent, dataUrl: string) => callback(dataUrl);
+    ipcRenderer.on('new-image', wrapper);
+    // returnera en funktion för att sluta lyssna om du vill:
+    return () => ipcRenderer.removeListener('new-image', wrapper);
+  },
+
+  /** Get cached image */
+  getCachedImage: () => ipcRenderer.invoke('get-cached-image'),
+
+  /** Handle updates */
   updater: {
     onUpdateChecking: (cb: () => void) => {
       const w = () => cb()
