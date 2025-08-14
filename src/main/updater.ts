@@ -64,9 +64,14 @@ export class Updater {
         log.warn('Failed to ensure autostart desktop file', e)
       }
       try {
-        this.updateSymlinkToLatest()
+        // Only repair symlink if missing or broken to avoid overriding a correct link
+        const needRepair = !fs.existsSync(this.LINUX_BIN_LINK) || !this._symlinkTargetExists(this.LINUX_BIN_LINK)
+        log.info(`Symlink check: exists=${fs.existsSync(this.LINUX_BIN_LINK)} targetExists=${this._symlinkTargetExists(this.LINUX_BIN_LINK)}`)
+        if (needRepair) {
+          this.updateSymlinkToLatest()
+        }
       } catch (e) {
-        log.warn('Failed to update symlink to latest', e)
+        log.warn('Failed to validate/update symlink to latest', e)
       }
       try {
         this.cleanupOldAppImages(2)
@@ -129,7 +134,30 @@ export class Updater {
         // Start download for current platform (macOS prioritized here)
         const asset = this.findAssetForPlatform(release)
         if (asset) {
+          // If Linux/AppImage, pre-clean old versions to free space (keep only current and the upcoming file)
+          if (process.platform === 'linux' && asset.name.endsWith('.AppImage')) {
+            const preTargetPath = path.join(this.LINUX_APP_DIR, asset.name)
+            try {
+              this.cleanupAppImagesKeep([process.execPath, preTargetPath])
+              log.info('Pre-cleaned old AppImages before download')
+            } catch (e) {
+              log.warn('Pre-clean failed', e)
+            }
+          }
+
           await this.downloadAssetWithProgress(asset)
+
+          // After download, ensure only the current and the newly downloaded file remain
+          if (process.platform === 'linux' && asset.name.endsWith('.AppImage')) {
+            const postTargetPath = path.join(this.LINUX_APP_DIR, asset.name)
+            try {
+              this.cleanupAppImagesKeep([process.execPath, postTargetPath])
+              log.info('Post-cleaned old AppImages after download')
+            } catch (e) {
+              log.warn('Post-clean failed', e)
+            }
+          }
+
           // Notify downloaded, then schedule restart with countdown
           this.sendToRenderer('update-downloaded', { version: latestVersion })
           this.scheduleRestartCountdown(5)
@@ -180,10 +208,10 @@ export class Updater {
 
     if (plat === 'linux') {
       const arch = this.getLinuxAppImageArch()
-      // Prefer exact-arch AppImage, then any AppImage as fallback
+      // Prefer exact-arch AppImage with correct product name, then any matching product name AppImage as fallback
       return (
-        assets.find(a => a.name.endsWith('.AppImage') && a.name.includes(arch)) ||
-        assets.find(a => a.name.endsWith('.AppImage')) ||
+        assets.find(a => this.isProductAppImage(a.name) && a.name.includes(arch)) ||
+        assets.find(a => this.isProductAppImage(a.name)) ||
         null
       )
     }
@@ -362,13 +390,34 @@ export class Updater {
           if (onZero) {
             onZero()
           } else if (process.platform === 'linux') {
-            // Prefer launching the symlink; if missing, fallback to the direct file path
-            let launchPath: string | null = this._pendingLinuxAppImageLink
-            if (!launchPath || !fs.existsSync(launchPath)) {
-              launchPath = this._pendingLinuxAppImagePath && fs.existsSync(this._pendingLinuxAppImagePath)
-                ? this._pendingLinuxAppImagePath
-                : null
+            // Prefer launching the symlink; ensure it points to the freshly downloaded AppImage
+            const pending = this._pendingLinuxAppImagePath
+            const link = this._pendingLinuxAppImageLink
+            let launchPath: string | null = null
+
+            if (link && fs.existsSync(link)) {
+              const target = this._readlinkSafe(link)
+              log.info(`Symlink at restart: ${link} -> ${target}`)
+              if (pending && target && path.resolve(target) !== path.resolve(pending)) {
+                // Try to repoint the link
+                try {
+                  try { fs.unlinkSync(link) } catch {}
+                  fs.symlinkSync(pending, link)
+                  fs.chmodSync(link, 0o755)
+                  log.info(`Symlink repointed ${link} -> ${pending}`)
+                } catch (e) {
+                  log.warn('Failed to repoint symlink, will launch direct file', e)
+                }
+              }
+              // Prefer using symlink after attempt to repoint
+              launchPath = link
             }
+
+            // Fallbacks
+            if (!launchPath || !fs.existsSync(launchPath)) {
+              if (pending && fs.existsSync(pending)) launchPath = pending
+            }
+
             if (!launchPath) {
               log.error('No launch path available for AppImage (symlink/file missing). Aborting restart.')
               this.sendToRenderer('update-error', 'Kunde inte starta den nya versionen (fil saknas).')
@@ -411,8 +460,8 @@ export class Updater {
     try { fs.mkdirSync(this.LINUX_APP_DIR, { recursive: true }) } catch {}
     const arch = this.getArchHint()
     return (fs.readdirSync(this.LINUX_APP_DIR)
-      .filter(f => f.endsWith('.AppImage'))
-      .filter(f => f.includes(this.PRODUCT_PREFIX) && f.includes(arch))
+      .filter(f => this.isProductAppImage(f))
+      .filter(f => f.includes(arch))
       .map(f => {
         const abs = path.join(this.LINUX_APP_DIR, f)
         const st = fs.statSync(abs)
@@ -456,6 +505,30 @@ export class Updater {
     }
   }
 
+  private _readlinkSafe(linkPath: string): string | null {
+    try {
+      const target = fs.readlinkSync(linkPath)
+      // If target is relative, resolve relative to link directory
+      if (!path.isAbsolute(target)) {
+        return path.resolve(path.dirname(linkPath), target)
+      }
+      return target
+    } catch {
+      return null
+    }
+  }
+
+  private _symlinkTargetExists(linkPath: string): boolean {
+    const target = this._readlinkSafe(linkPath)
+    return !!(target && fs.existsSync(target))
+  }
+
+  private isProductAppImage(name: string): boolean {
+    const n = name.toLowerCase()
+    const startsOk = n.startsWith('potential potato') || n.startsWith('potential.potato') || n.startsWith('potential-potato')
+    return startsOk && n.endsWith('.appimage')
+  }
+
   private ensureAutostartDesktop(): void {
     if (process.platform !== 'linux') return
     try { fs.mkdirSync(this.LINUX_AUTOSTART_DIR, { recursive: true }) } catch {}
@@ -492,6 +565,28 @@ export class Updater {
         log.info('Deleted old AppImage:', f.file)
       } catch (e) {
         log.warn('Failed to delete old AppImage:', f.file, e)
+      }
+    }
+  }
+
+  // Clean up AppImage files keeping only the provided absolute paths (if they exist) and the running binary
+  private cleanupAppImagesKeep(keepPaths: string[]): void {
+    if (process.platform !== 'linux') return
+    const keepResolved = new Set(
+      keepPaths.filter(Boolean).map(p => path.resolve(p))
+    )
+    // Always keep the running binary
+    keepResolved.add(path.resolve(process.execPath))
+
+    const all = this.listAppImages()
+    for (const f of all) {
+      const abs = path.resolve(f.file)
+      if (keepResolved.has(abs)) continue
+      try {
+        fs.unlinkSync(abs)
+        log.info('Deleted old AppImage (keep-set):', abs)
+      } catch (e) {
+        log.warn('Failed to delete AppImage (keep-set):', abs, e)
       }
     }
   }
