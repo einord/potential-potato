@@ -18,6 +18,11 @@
       <p class="title">Fel vid uppdatering</p>
       <p class="detail">{{ errMessage }}</p>
     </div>
+
+    <!-- Version badge bottom-right -->
+    <div v-if="appVersion" class="version-badge" aria-label="Application version">
+      v{{ appVersion }}
+    </div>
   </main>
 </template>
 
@@ -35,6 +40,9 @@ const errShow = ref(false)
 const errMessage = ref('')
 let errTimer: number | null = null
 
+// Holds application version shown in bottom-right corner
+const appVersion = ref('')
+
 function showError(msg: string) {
   // Hide main downloading toast if showing
   downloading.value = false
@@ -51,8 +59,15 @@ function showError(msg: string) {
   }, 20000)
 }
 
-onMounted(() => {
+onMounted(async () => {
   const offs: Array<() => void> = []
+  // Fetch and display app version from main process
+  try {
+    if (window.api?.getVersion) {
+      appVersion.value = await window.api.getVersion()
+    }
+  } catch {}
+
   if (window.api?.updater) {
     offs.push(
       window.api.updater.onUpdateAvailable((info) => {
@@ -95,6 +110,7 @@ onMounted(() => {
   min-height: 100vh;
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
   background-color: black;
+  color: white;
 }
 
 h1 { font-size: 2.25rem; }
@@ -136,5 +152,19 @@ h1 { font-size: 2.25rem; }
   background: #4CAF50;
   width: 0%;
   transition: width 0.3s ease;
+}
+
+.version-badge {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  user-select: none;
 }
 </style>

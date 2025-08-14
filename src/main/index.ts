@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu } from 'electron'
+import { app, BrowserWindow, Menu, ipcMain } from 'electron'
 import { join } from 'node:path'
 import { Updater } from './updater'
 
@@ -17,6 +17,9 @@ async function createWindow() {
 
   // Initialize updater once the window exists
   updater = new Updater(win, app.getVersion())
+
+  // IPC: expose application version to renderer
+  ipcMain.handle('get-version', () => app.getVersion())
 
   // Create application menu with a manual update check item
   const template = [
