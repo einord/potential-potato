@@ -11,7 +11,7 @@ const stylePassepartoutColor = computed(() => currentSettings.value.passepartout
 const styleImageWidthHeight = computed(() => `calc(100% - ${currentSettings.value.passepartoutWidth}px - ${currentSettings.value.passepartoutWidth}px)`)
 const styleImageTransition = computed(() => `opacity ${currentSettings.value.transitionDuration}ms ease-in-out;`)
 const styleImage1Url = ref(`url('${defaultImageUrl}')`)
-const styleImage2Url = ref(`none`)
+const styleImage2Url = ref(`url('${defaultImageUrl}')`)
 const styleImage1Opacity = computed(() => currentImage.value === 1 ? 1 : 0)
 const styleImage2Opacity = computed(() => currentImage.value === 2 ? 1 : 0)
 const styleImageMargin = computed(() => `${currentSettings.value.passepartoutWidth}px`)
@@ -27,11 +27,15 @@ onMounted(() => {
     if (onNewImage) {
         onNewImage(dataUrl => {
             // Set the background image for the next layer, and switch to it
+            const newData = `url('${dataUrl}')`
+            console.log('New image received:', dataUrl)
             if (currentImage.value === 1) {
-                styleImage2Url.value = `url('${dataUrl}')`
+                console.log('Previous value:', styleImage2Url.value)
+                styleImage2Url.value = newData
                 currentImage.value = 2
             } else {
-                styleImage1Url.value = `url('${dataUrl}')`
+                console.log('Previous value:', styleImage1Url.value)
+                styleImage1Url.value = newData
                 currentImage.value = 1
             }
         })

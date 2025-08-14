@@ -1,26 +1,124 @@
 import SMB2 from 'v9u-smb2'
-import path from 'path'
+import path, { join } from 'path'
 import * as os from 'os'
-import { SmbSettings } from './smb-settings'
+import { defaultSmbSettings, SmbSettings } from './smb-settings'
+import { promises as fs } from 'fs'
+import { watch } from 'chokidar'
+import { app, BrowserWindow } from 'electron'
+import { RemoteSettings } from 'src/shared-types/remote-settings'
 
-export interface RemoteSettings {
-  refreshRate: number
-  passepartoutColor?: string
-  passepartoutWidth?: number
-  transitionDuration?: number // in milliseconds, 0 = no transition
-  showAppVersion?: boolean
+export interface CachedImage {
+    dataUrl: string;
+    settings?: RemoteSettings;
+    fileName: string;
 }
 
+const userDataPath = app.getPath('userData')
+export const smbSettingsFile = join(userDataPath, 'pp-smb.json')
+export let currentSmbSettings: SmbSettings = defaultSmbSettings
+let cachedImageData: CachedImage | undefined = undefined
+let refreshTimer: NodeJS.Timeout | string | number | undefined
+let timeout = 10
+
 export let remoteSettings: RemoteSettings | undefined = undefined
+let lastRemoteSettingsJson: string | undefined = undefined
 const defaultRemoteSettings: RemoteSettings = {
-  refreshRate: 60 * 1000, // Default to 60 seconds
-  showAppVersion: true,
+    refreshRate: 60 * 1000, // Default to 60 seconds
+    showAppVersion: true,
 }
 
 let smbClient: SMB2
 const IMAGE_EXTS = /\.(jpe?g|png|gif|bmp|webp)$/i
 
-export async function loadSmbImage(currentSmbSettings: SmbSettings, currentFileName?: string) {
+export async function ensureSmbSettingsFile() {
+    try {
+        await fs.access(smbSettingsFile);
+    } catch {
+        // If the file does not exist, create it with default settings
+        await fs.mkdir(userDataPath, { recursive: true });
+        await fs.writeFile(smbSettingsFile, JSON.stringify(defaultSmbSettings, null, 2), 'utf-8');
+        console.log(`Settings file created with default settings at ${smbSettingsFile}.`);
+    }
+}
+
+export async function loadSmbSettings() {
+    try {
+        const raw = await fs.readFile(smbSettingsFile, 'utf-8');
+        currentSmbSettings = Object.assign({}, defaultSmbSettings, JSON.parse(raw) as SmbSettings);
+        // console.log(`Settings loaded from ${smbSettingsFile}:`, currentSmbSettings);
+        console.log(`Settings loaded from ${smbSettingsFile}`);
+    } catch {
+        console.error(`Failed to load settings from ${smbSettingsFile}.`);
+        currentSmbSettings = defaultSmbSettings; // Fallback to default settings
+    }
+
+    return currentSmbSettings
+}
+
+export function watchSmbSettingsFile(mainWindow: BrowserWindow) {
+    const watcher = watch(smbSettingsFile, { ignoreInitial: true });
+    watcher.on('change', async () => {
+        console.log(`SMB settings file changed: ${smbSettingsFile}. Reloading SMB settings...`);
+        await loadSmbSettings();
+        setRefreshTimer();
+        mainWindow.webContents.send('smb-settings-updated', currentSmbSettings);
+    });
+}
+
+function setRefreshTimer() {
+    if (refreshTimer) {
+        clearInterval(refreshTimer);
+    }
+
+    timeout = getTimeoutFromRefreshRate(remoteSettings?.refreshRate)
+    refreshTimer = setInterval(loadNextImage, timeout)
+    console.log(`Refresh timer set to ${timeout} milliseconds`);
+}
+
+function getTimeoutFromRefreshRate(refreshRate: number | undefined): number {
+    return (refreshRate || 10) * 1000
+}
+
+export async function loadNextImage(mainWindow: BrowserWindow) {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+
+  console.log(`Refreshing image...`);
+  try {
+    // Pass current filename to avoid loading the same image twice
+    const currentFileName = cachedImageData?.fileName;
+    const imageData = await loadSmbImage(currentFileName);
+    console.log('Random image loaded from SMB: ', imageData.fileName);
+    if (imageData) {
+      // Cache the image data
+      cachedImageData = imageData;
+
+      // Emit remote settings update if changed
+      try {
+        const settingsJson = JSON.stringify(imageData.settings ?? {});
+        if (settingsJson !== lastRemoteSettingsJson) {
+          lastRemoteSettingsJson = settingsJson;
+          mainWindow.webContents.send('remote-settings-updated', imageData.settings);
+        }
+      } catch {
+        // ignore JSON stringify errors
+        console.error('Error stringifying remote settings');
+      }
+      
+      // Send the image data to the renderer process
+      mainWindow.webContents.send('new-image', imageData.dataUrl);
+    }
+
+    if(getTimeoutFromRefreshRate(remoteSettings?.refreshRate) != timeout) {
+      console.log('Remote timer settings changed, resetting refresh timer.');
+      setRefreshTimer()
+    }
+  } catch (error) {
+    console.error('Error loading next image:', error);
+    setRefreshTimer();
+  }
+}
+
+export async function loadSmbImage(currentFileName?: string): Promise<CachedImage> {
   // Init SMB client with current settings
   await initSmb(currentSmbSettings)
 
