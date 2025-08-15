@@ -63,8 +63,11 @@ defineExpose({
     text-shadow: 2px 0 black, -2px 0 black, 0 2px black, 0 -2px black, 1px 1px black, -1px -1px black, 1px -1px black, -1px 1px black;
     font-size: 0.8rem;
 
-    &.toast--error {
-        background: rgba(180, 24, 24, 0.92);
+    &.error {
+        background: rgba(152, 32, 8, 0.92);
+        padding: 0.75rem;
+        border-radius: 0.5rem;
+        text-shadow: none;
     }
 }
 </style>

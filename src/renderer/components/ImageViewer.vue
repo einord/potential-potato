@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { defaultRemoteSettings, RemoteSettings } from '../../shared-types/remote-settings';
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
+import { listenRemoteSettings, listenNewImage, type Off } from '../lib/events';
 
 const currentImage1Data = ref<string>()
 const currentImage2Data = ref<string>()
@@ -17,6 +18,8 @@ const styleImage1Opacity = computed(() => currentImage.value === 1 ? 1 : 0)
 const styleImage2Opacity = computed(() => currentImage.value === 2 ? 1 : 0)
 const styleImageMargin = computed(() => `${currentSettings.passepartoutWidth}px`)
 
+let offs: Off[] = []
+
 onMounted(() => {
     window.api?.getCachedImage().then(data => {
         if (currentImage1Data.value == null) {
@@ -24,16 +27,15 @@ onMounted(() => {
         }
     })
 
-    // Set updated remote settings when they change
-    const onRemoteSettingsUpdated = window.api?.onRemoteSettingsUpdated
-    if (onRemoteSettingsUpdated) {
-        onRemoteSettingsUpdated(settings => Object.assign(currentSettings, defaultRemoteSettings, settings))
-    }
+    // Use shared helpers
+    offs.push(
+        listenRemoteSettings((settings: RemoteSettings) => {
+            Object.assign(currentSettings, defaultRemoteSettings, settings)
+        })
+    )
 
-    const onNewImage = window.api?.onNewImage
-    if (onNewImage) {
-        onNewImage(dataUrl => {
-            // Set the background image for the next layer, and switch to it
+    offs.push(
+        listenNewImage((dataUrl: string) => {
             if (currentImage.value === 1) {
                 currentImage2Data.value = dataUrl
                 currentImage.value = 2
@@ -42,7 +44,11 @@ onMounted(() => {
                 currentImage.value = 1
             }
         })
-    }
+    )
+})
+
+onUnmounted(() => {
+    offs.forEach(off => off())
 })
 
 </script>

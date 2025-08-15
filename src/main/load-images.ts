@@ -8,9 +8,9 @@ import { app, BrowserWindow } from 'electron'
 import { RemoteSettings } from 'src/shared-types/remote-settings'
 
 export interface CachedImage {
-    dataUrl: string;
-    settings?: RemoteSettings;
-    fileName: string;
+  dataUrl: string
+  settings?: RemoteSettings
+  fileName: string
 }
 
 const userDataPath = app.getPath('userData')
@@ -23,98 +23,138 @@ let timeout = 10
 export let remoteSettings: RemoteSettings | undefined = undefined
 let lastRemoteSettingsJson: string | undefined = undefined
 const defaultRemoteSettings: RemoteSettings = {
-    refreshRate: 60 * 1000, // Default to 60 seconds
-    showAppVersion: true,
+  refreshRate: 60 * 1000, // Default to 60 seconds
+  showAppVersion: true,
 }
 
 let smbClient: SMB2
 const IMAGE_EXTS = /\.(jpe?g|png|gif|bmp|webp)$/i
 
-export async function ensureSmbSettingsFile() {
-    try {
-        await fs.access(smbSettingsFile);
-    } catch {
-        // If the file does not exist, create it with default settings
-        await fs.mkdir(userDataPath, { recursive: true });
-        await fs.writeFile(smbSettingsFile, JSON.stringify(defaultSmbSettings, null, 2), 'utf-8');
-        console.log(`Settings file created with default settings at ${smbSettingsFile}.`);
+// Keep a reference to main window to send generic app errors
+let eventsWindow: BrowserWindow | null = null
+let rendererIsReady = false
+const earlyErrorsBuffer: { message: string }[] = []
+export function setEventWindow(win: BrowserWindow) {
+  eventsWindow = win
+}
+
+export function markRendererReady() {
+  rendererIsReady = true
+}
+
+export function drainPendingErrors(): { message: string }[] {
+  // Return and clear buffered errors
+  return earlyErrorsBuffer.splice(0)
+}
+
+function sendAppError(message: string) {
+  try {
+    const payload = JSON.parse(JSON.stringify({ message }))
+    if (rendererIsReady) {
+      eventsWindow?.webContents.send('app-error', payload)
+    } else {
+      // Buffer until renderer is ready
+      earlyErrorsBuffer.push({ message })
     }
+  } catch {}
+}
+
+export async function ensureSmbSettingsFile() {
+  try {
+    await fs.access(smbSettingsFile)
+  } catch {
+    try {
+      // If the file does not exist, create it with default settings
+      await fs.mkdir(userDataPath, { recursive: true })
+      await fs.writeFile(smbSettingsFile, JSON.stringify(defaultSmbSettings, null, 2), 'utf-8')
+      console.log(`Settings file created with default settings at ${smbSettingsFile}.`)
+    } catch (e: any) {
+      console.error(`Failed to create SMB settings file at ${smbSettingsFile}: ${e?.message ?? e}`)
+      sendAppError(`Failed to create SMB settings file: ${e?.message ?? e}`)
+    }
+  }
 }
 
 export async function loadSmbSettings() {
-    try {
-        const raw = await fs.readFile(smbSettingsFile, 'utf-8');
-        currentSmbSettings = Object.assign({}, defaultSmbSettings, JSON.parse(raw) as SmbSettings);
-        // console.log(`Settings loaded from ${smbSettingsFile}:`, currentSmbSettings);
-        console.log(`Settings loaded from ${smbSettingsFile}`);
-    } catch {
-        console.error(`Failed to load settings from ${smbSettingsFile}.`);
-        currentSmbSettings = defaultSmbSettings; // Fallback to default settings
-    }
+  try {
+    const raw = await fs.readFile(smbSettingsFile, 'utf-8')
+    currentSmbSettings = Object.assign({}, defaultSmbSettings, JSON.parse(raw) as SmbSettings)
+    // console.log(`Settings loaded from ${smbSettingsFile}:`, currentSmbSettings);
+    console.log(`Settings loaded from ${smbSettingsFile}`)
+  } catch (e: any) {
+    console.error(`Failed to load settings from ${smbSettingsFile}.`)
+    currentSmbSettings = defaultSmbSettings // Fallback to default settings
+    sendAppError(`Failed to load SMB settings from ${smbSettingsFile}: ${e?.message ?? e}`)
+  }
 
-    return currentSmbSettings
+  return currentSmbSettings
 }
 
 export function watchSmbSettingsFile(mainWindow: BrowserWindow) {
-    const watcher = watch(smbSettingsFile, { ignoreInitial: true });
-    watcher.on('change', async () => {
-        console.log(`SMB settings file changed: ${smbSettingsFile}. Reloading SMB settings...`);
-        await loadSmbSettings();
-        setRefreshTimer(mainWindow);
-        mainWindow.webContents.send('smb-settings-updated', currentSmbSettings);
-    });
+  const watcher = watch(smbSettingsFile, { ignoreInitial: true })
+  watcher.on('change', async () => {
+    console.log(`SMB settings file changed: ${smbSettingsFile}. Reloading SMB settings...`)
+    await loadSmbSettings()
+    setRefreshTimer(mainWindow)
+    mainWindow.webContents.send('smb-settings-updated', currentSmbSettings)
+  })
 }
 
 function setRefreshTimer(mainWindow: BrowserWindow) {
-    if (refreshTimer) {
-        clearInterval(refreshTimer);
-    }
+  if (refreshTimer) {
+    clearInterval(refreshTimer)
+  }
 
-    timeout = getTimeoutFromRefreshRate(remoteSettings?.refreshRate)
-    refreshTimer = setInterval(() => loadNextImage(mainWindow), timeout)
-    console.log(`Refresh timer set to ${timeout} milliseconds`);
+  timeout = getTimeoutFromRefreshRate(remoteSettings?.refreshRate)
+  refreshTimer = setInterval(() => loadNextImage(mainWindow), timeout)
+  console.log(`Refresh timer set to ${timeout} milliseconds`)
 }
 
 function getTimeoutFromRefreshRate(refreshRate: number | undefined): number {
-    return (refreshRate || 10) * 1000
+  return (refreshRate || 10) * 1000
 }
 
 export async function loadNextImage(mainWindow: BrowserWindow) {
   if (!mainWindow || mainWindow.isDestroyed()) return
 
-  console.log(`Refreshing image...`);
+  console.log(`Refreshing image...`)
   try {
     // Pass current filename to avoid loading the same image twice
-    const currentFileName = cachedImageData?.fileName;
-    const imageData = await loadSmbImage(currentFileName);
-    console.log('Random image loaded from SMB: ', imageData.fileName);
+    const currentFileName = cachedImageData?.fileName
+    const imageData = await loadSmbImage(currentFileName)
+    console.log('Random image loaded from SMB: ', imageData.fileName)
     if (imageData) {
       // Cache the image data
-      cachedImageData = imageData;
+      cachedImageData = imageData
 
       // Emit remote settings update if changed
       try {
-        const settingsJson = JSON.stringify(imageData.settings ?? {});
+        const settingsJson = JSON.stringify(imageData.settings ?? {})
         if (settingsJson !== lastRemoteSettingsJson) {
-          lastRemoteSettingsJson = settingsJson;
-          mainWindow.webContents.send('remote-settings-updated', imageData.settings);
+          lastRemoteSettingsJson = settingsJson
+          // Ensure payload is structured-cloneable across IPC
+          const plainSettings = JSON.parse(
+            JSON.stringify(imageData.settings ?? {})
+          ) as RemoteSettings
+          mainWindow.webContents.send('remote-settings-updated', plainSettings)
         }
       } catch {
         // ignore JSON stringify errors
-        console.error('Error stringifying remote settings');
+        console.error('Error stringifying remote settings')
       }
-      
+
       // Send the image data to the renderer process
-      mainWindow.webContents.send('new-image', imageData.dataUrl);
+      mainWindow.webContents.send('new-image', imageData.dataUrl)
     }
 
-    if(getTimeoutFromRefreshRate(remoteSettings?.refreshRate) != timeout) {
-      console.log('Remote timer settings changed, resetting refresh timer.');
+    if (getTimeoutFromRefreshRate(remoteSettings?.refreshRate) != timeout) {
+      console.log('Remote timer settings changed, resetting refresh timer.')
       setRefreshTimer(mainWindow)
     }
-  } catch (error) {
-    console.error('Error loading next image:', error);
-    setRefreshTimer(mainWindow);
+  } catch (error: any) {
+    console.error('Error loading next image:', error)
+    sendAppError(`Failed to load next image: ${error?.message ?? error}`)
+    setRefreshTimer(mainWindow)
   }
 }
 
@@ -222,9 +262,10 @@ export async function loadRemoteSettings(dir?: string) {
   try {
     remoteSettings = JSON.parse(settingsFile.toString()) as RemoteSettings
     console.log('Loaded settings:', remoteSettings)
-  } catch {
+  } catch (e: any) {
     remoteSettings = remoteSettings ?? defaultRemoteSettings
     console.warn('Failed to parse settings file as JSON.')
+    sendAppError(`Failed to parse remote settings JSON: ${e?.message ?? e}`)
   }
 }
 

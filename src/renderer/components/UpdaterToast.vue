@@ -12,6 +12,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue';
 import Toast from './Toast.vue';
+import { updaterEvents, type Off } from '../lib/events'
 
 const updateToast = ref<InstanceType<typeof Toast> | null>(null)
 
@@ -21,46 +22,47 @@ const countdown = ref(0)
 const percent = ref(0)
 
 onMounted(async () => {
-    const offs: Array<() => void> = []
+    const offs: Off[] = []
 
-    const u = window.api?.updater
-    if (
-        u &&
-        u.onUpdateAvailable &&
-        u.onDownloadProgress &&
-        u.onUpdateDownloaded &&
-        u.onUpdateRestarting &&
-        u.onUpdateError
-    ) {
-        offs.push(
-            u.onUpdateAvailable((info) => {
-                title.value = `Update available: v${info.version}`
-                if (updateToast?.value) updateToast.value.show()
-            }),
-            u.onDownloadProgress((p) => {
-                downloading.value = true
-                percent.value = p.percent
-                title.value = 'Downloading update'
-                if (updateToast?.value) updateToast.value.show()
-            }),
-            u.onUpdateDownloaded(() => {
-                downloading.value = false
-                percent.value = 100
-                title.value = 'Update downloaded'
-                if (updateToast?.value) updateToast.value.show()
-            }),
-            u.onUpdateRestarting((r) => {
-                countdown.value = Math.max(0, r.secondsRemaining)
-                title.value = 'Update installed'
-                if (updateToast?.value) updateToast.value.show()
-            }),
-            u.onUpdateError(() => {
-                updateToast.value?.hide()
-            })
-        )
-    }
+    offs.push(
+        updaterEvents.onAvailable((info) => {
+            title.value = `Update available: v${info.version}`
+            updateToast.value?.show()
+        })
+    )
 
-    // Release event listeners
+    offs.push(
+        updaterEvents.onProgress((p) => {
+            downloading.value = true
+            percent.value = p.percent
+            title.value = 'Downloading update'
+            updateToast.value?.show()
+        })
+    )
+
+    offs.push(
+        updaterEvents.onDownloaded(() => {
+            downloading.value = false
+            percent.value = 100
+            title.value = 'Update downloaded'
+            updateToast.value?.show()
+        })
+    )
+
+    offs.push(
+        updaterEvents.onRestarting((r) => {
+            countdown.value = Math.max(0, r.secondsRemaining)
+            title.value = 'Update installed'
+            updateToast.value?.show()
+        })
+    )
+
+    offs.push(
+        updaterEvents.onError(() => {
+            updateToast.value?.hide()
+        })
+    )
+
     onUnmounted(() => {
         offs.forEach((off) => off())
     })

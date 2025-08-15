@@ -1,31 +1,34 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, reactive, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import Toast from './components/Toast.vue'
 import UpdaterToast from './components/UpdaterToast.vue'
 import ImageViewer from './components/ImageViewer.vue'
-import { defaultRemoteSettings, RemoteSettings } from '../shared-types/remote-settings'
+import { updaterEvents, type Off, listenAppError } from './lib/events'
+import { useRemoteSettings } from './composables/useRemoteSettings'
 
 const versionToast = ref<InstanceType<typeof Toast> | null>(null)
-const currentSettings = reactive<RemoteSettings>(defaultRemoteSettings)
+const errorToast = ref<InstanceType<typeof Toast> | null>(null)
+const { settings: currentSettings } = useRemoteSettings()
 
 // Error toast state (auto-hide after 20s)
-const errShow = ref(false)
 const errMessage = ref('')
 let errTimer: number | null = null
 
 // Holds application version shown in bottom-right corner
 const appVersion = ref('')
 
+// Off handlers collected across lifecycle
+const offs: Off[] = []
+
 function showError(msg: string) {
   // Hide main downloading toast if showing
-
   errMessage.value = msg
-  errShow.value = true
+  errorToast.value?.show()
   if (errTimer) {
     window.clearTimeout(errTimer)
   }
   errTimer = window.setTimeout(() => {
-    errShow.value = false
+    errorToast.value?.hide()
     errTimer = null
   }, 20000)
 }
@@ -33,7 +36,7 @@ function showError(msg: string) {
 onMounted(async () => {
   versionToast?.value?.show(); // Always show the toast
 
-  const offs: Array<() => void> = []
+  
   // Fetch and display app version from main process
   try {
     if (window.api?.getVersion) {
@@ -41,33 +44,45 @@ onMounted(async () => {
     }
   } catch {}
 
-    // Set updated remote settings when they change
-    const onRemoteSettingsUpdated = window.api?.onRemoteSettingsUpdated
-    if (onRemoteSettingsUpdated) {
-        onRemoteSettingsUpdated(settings => {
-          Object.assign(currentSettings, defaultRemoteSettings, settings)
-
-          // Hide / show the app version depending on settings
-          if (currentSettings.showAppVersion === true) {
-              versionToast.value?.show()
-          } else {
-              versionToast.value?.hide()
-          }
-      })
-    }
-
-  const u = window.api?.updater
-  if (u?.onUpdateError) {
-    offs.push(
-      u.onUpdateError((err) => {
-        showError(err.message)
-      })
-    )
-  }
-  onUnmounted(() => {
-    offs.forEach((off) => off())
-    if (errTimer) window.clearTimeout(errTimer)
+  // React to remote setting toggles (useRemoteSettings keeps it updated)
+  offs.push(() => {
+    // simple off placeholder so offs array is not empty; no-op cleanup
+    return () => {}
   })
+
+  // Apply toast visibility based on current settings (kept synced by composable)
+  setTimeout(() => {
+    if (currentSettings.showAppVersion === true) {
+      versionToast.value?.show()
+    } else {
+      versionToast.value?.hide()
+    }
+  }, 0)
+
+  // Use updater event helpers
+  offs.push(
+    updaterEvents.onError((err) => setTimeout(()=> showError(err.message), 0))
+  )
+
+  // Generic app errors (image load, remote settings parse, smb settings etc.)
+  offs.push(
+    listenAppError((e) => setTimeout(()=> showError(e.message), 0))
+  )
+
+  // Signal to main that renderer is mounted and ready AFTER listeners are set up
+  try {
+    if (window.api?.rendererReady) {
+      await window.api.rendererReady()
+    }
+  } catch (e) {
+    console.error('[renderer] rendererReady failed', e)
+  }
+})
+
+// Register cleanup at top-level so Vue can associate it with this component instance
+onUnmounted(() => {
+  if (errTimer) window.clearTimeout(errTimer)
+  offs.forEach((off) => off())
 })
 </script>
 
@@ -76,10 +91,10 @@ onMounted(async () => {
     <ImageViewer />
 
     <!-- Felruta nere till vänster -->
-    <div v-if="errShow" class="toast toast--error">
-      <p class="title">Fel vid uppdatering</p>
+    <Toast ref="errorToast" position="bottomLeft" :error="true">
+      <p class="title">Felmeddelande</p>
       <p class="detail">{{ errMessage }}</p>
-    </div>
+    </Toast>
 
     <!-- Uppdaterings-toast uppe till höger -->
     <UpdaterToast />
