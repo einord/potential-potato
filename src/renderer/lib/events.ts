@@ -10,6 +10,7 @@ export interface UpdateInfo { version: string }
 export interface DownloadProgress { percent: number }
 export interface UpdateError { message: string }
 export interface RestartingInfo { secondsRemaining: number }
+export interface AppError { message: string }
 
 function addDomListener<T>(eventName: string, mapDetail: (ev: Event) => T, cb: (payload: T) => void): Off {
   const handler: EventListener = (ev: Event) => {
@@ -30,6 +31,10 @@ export function listenRemoteSettings(cb: (settings: RemoteSettings) => void): Of
 
 export function listenNewImage(cb: (dataUrl: string) => void): Off {
   return addDomListener(NEW_IMAGE_EVENT, ev => (ev as CustomEvent).detail as string, cb)
+}
+
+export function listenAppError(cb: (err: AppError) => void): Off {
+  return addDomListener('app-error', ev => (ev as CustomEvent).detail as AppError, cb)
 }
 
 // Updater wrappers (speglar preload-API:t)

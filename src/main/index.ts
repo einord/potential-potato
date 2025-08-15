@@ -1,10 +1,11 @@
 import { app, BrowserWindow, Menu, ipcMain } from 'electron'
 import { join } from 'node:path'
 import { Updater } from './updater'
-import { cachedImageData, ensureSmbSettingsFile, loadNextImage, loadSmbSettings, watchSmbSettingsFile } from './load-images'
+import { cachedImageData, ensureSmbSettingsFile, loadNextImage, loadSmbSettings, watchSmbSettingsFile, setEventWindow, markRendererReady, drainPendingErrors } from './load-images'
 
 let mainWindow: BrowserWindow | null = null
 let updater: Updater | null = null
+let initialized = false
 
 async function createWindow() {
   mainWindow = new BrowserWindow({
@@ -19,6 +20,9 @@ async function createWindow() {
 
   // Initialize updater once the window exists
   updater = new Updater(mainWindow, app.getVersion())
+
+  // Set window for generic app events as early as possible
+  setEventWindow(mainWindow)
 
   // IPC: expose application version to renderer
   ipcMain.handle('get-version', () => app.getVersion())
@@ -48,13 +52,6 @@ async function createWindow() {
   } else {
     await mainWindow.loadFile(join(__dirname, '../../dist/index.html'))
   }
-
-  // Ensure and load settings
-  await ensureSmbSettingsFile()
-  await loadSmbSettings()
-  watchSmbSettingsFile(mainWindow)
-  
-  await loadNextImage(mainWindow)
 }
 
 app.on('window-all-closed', () => {
@@ -75,5 +72,42 @@ app.whenReady().then(async () => {
     return cachedImageData;
   });
 
+  // IPC for renderer to tell main it is fully mounted and ready
+  ipcMain.handle('renderer-ready', async () => {
+    try {
+      console.log('[main] renderer-ready received')
+      // Mark renderer ready
+      markRendererReady()
+      // Flush any pending early app errors now that renderer can receive them
+      const pending = drainPendingErrors()
+      for (const err of pending) {
+        mainWindow?.webContents.send('app-error', JSON.parse(JSON.stringify(err)))
+      }
+      // Ensure initialization has run (second trigger)
+      await startInit()
+    } catch (e) {
+      console.error('Initialization after renderer-ready failed:', e)
+    }
+  })
+
   await createWindow()
 })
+
+async function startInit() {
+  if (initialized) return
+  initialized = true
+  try {
+    console.log('[main] startInit: running initialization')
+    if (mainWindow) {
+      await ensureSmbSettingsFile()
+      await loadSmbSettings()
+      watchSmbSettingsFile(mainWindow)
+      await loadNextImage(mainWindow)
+    }
+  } catch (e) {
+    console.error('Initialization failed:', e)
+    if (mainWindow) {
+      mainWindow.webContents.send('app-error', `Initialization failed: ${e}`)
+    }
+  }
+}

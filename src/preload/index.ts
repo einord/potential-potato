@@ -31,6 +31,7 @@ const UPDATE_DOWNLOAD_PROGRESS_EVENT = 'pp-update-download-progress'
 const UPDATE_DOWNLOADED_EVENT = 'pp-update-downloaded'
 const UPDATE_ERROR_EVENT = 'pp-update-error'
 const UPDATE_RESTARTING_EVENT = 'pp-update-restarting'
+const APP_ERROR_EVENT = 'app-error'
 
 const updaterDomListeners = {
   checking: new Map<() => void, EventListener>(),
@@ -85,10 +86,22 @@ ipcRenderer.on('update-restarting', (_e: IpcRendererEvent, info: RestartingInfo)
   window.dispatchEvent(new CustomEvent(UPDATE_RESTARTING_EVENT, { detail: info }))
 })
 
+// route generic app errors to DOM
+ipcRenderer.on('app-error', (_e: IpcRendererEvent, payload: { message: string }) => {
+  try {
+    const plain = JSON.parse(JSON.stringify(payload)) as { message: string }
+    window.dispatchEvent(new CustomEvent(APP_ERROR_EVENT, { detail: plain }))
+  } catch (e) {
+    console.error('Failed to dispatch app-error:', e)
+  }
+})
+
 contextBridge.exposeInMainWorld('api', {
   ping: () => 'pong',
   // Provide the application version to renderer
   getVersion: (): Promise<string> => ipcRenderer.invoke('get-app-version'),
+  // Signal to main that the renderer is fully mounted and ready to receive events
+  rendererReady: (): Promise<void> => ipcRenderer.invoke('renderer-ready'),
 
   /** Remote settings updated */
   onRemoteSettingsUpdated: (callback: (settings: RemoteSettings) => void): void => {

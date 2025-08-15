@@ -5,21 +5,24 @@ export {}
 declare global {
   interface Window {
     api?: {
-      // Returns the application version (e.g., "1.2.3")
+      /** Returns the application version (e.g., "1.2.3"). */
       getVersion?: () => Promise<string>
 
-      // Remote settings
+      /** Inform main process that renderer is mounted and ready to receive events. */
+      rendererReady?: () => Promise<void>
+
+      /** Remote settings */
       onRemoteSettingsUpdated: (callback: (settings: RemoteSettings) => void) => void
       offRemoteSettingsUpdated: (callback: (settings: RemoteSettings) => void) => void
 
-      // Images
+      /** Images */
       onNewImage: (callback: (dataUrl: string) => void) => void
       offNewImage: (callback: (dataUrl: string) => void) => void
 
-      // Cache
-      getCachedImage(): Promise<{ dataUrl: string; settings?: RemoteSettings; fileName: string } | null>;
+      /** Cache */
+      getCachedImage(): Promise<{ dataUrl: string; settings?: RemoteSettings; fileName: string } | undefined>;
 
-      // Updater events
+      /** Updater events */
       updater?: {
         onUpdateChecking?: (cb: () => void) => void
         offUpdateChecking?: (cb: () => void) => void

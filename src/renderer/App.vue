@@ -3,7 +3,7 @@ import { onMounted, onUnmounted, ref } from 'vue'
 import Toast from './components/Toast.vue'
 import UpdaterToast from './components/UpdaterToast.vue'
 import ImageViewer from './components/ImageViewer.vue'
-import { updaterEvents, type Off } from './lib/events'
+import { updaterEvents, type Off, listenAppError } from './lib/events'
 import { useRemoteSettings } from './composables/useRemoteSettings'
 
 const versionToast = ref<InstanceType<typeof Toast> | null>(null)
@@ -61,10 +61,22 @@ onMounted(async () => {
 
   // Use updater event helpers
   offs.push(
-    updaterEvents.onError((err) => {
-      setTimeout(() => showError(err.message), 0)
-    })
+    updaterEvents.onError((err) => setTimeout(()=> showError(err.message), 0))
   )
+
+  // Generic app errors (image load, remote settings parse, smb settings etc.)
+  offs.push(
+    listenAppError((e) => setTimeout(()=> showError(e.message), 0))
+  )
+
+  // Signal to main that renderer is mounted and ready AFTER listeners are set up
+  try {
+    if (window.api?.rendererReady) {
+      await window.api.rendererReady()
+    }
+  } catch (e) {
+    console.error('[renderer] rendererReady failed', e)
+  }
 })
 
 // Register cleanup at top-level so Vue can associate it with this component instance
@@ -80,7 +92,7 @@ onUnmounted(() => {
 
     <!-- Felruta nere till vänster -->
     <Toast ref="errorToast" position="bottomLeft" :error="true">
-      <p class="title">Fel vid uppdatering</p>
+      <p class="title">Felmeddelande</p>
       <p class="detail">{{ errMessage }}</p>
     </Toast>
 
