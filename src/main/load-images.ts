@@ -97,7 +97,9 @@ export async function loadNextImage(mainWindow: BrowserWindow) {
         const settingsJson = JSON.stringify(imageData.settings ?? {});
         if (settingsJson !== lastRemoteSettingsJson) {
           lastRemoteSettingsJson = settingsJson;
-          mainWindow.webContents.send('remote-settings-updated', imageData.settings);
+          // Ensure payload is structured-cloneable across IPC
+          const plainSettings = JSON.parse(JSON.stringify(imageData.settings ?? {})) as RemoteSettings
+          mainWindow.webContents.send('remote-settings-updated', plainSettings);
         }
       } catch {
         // ignore JSON stringify errors

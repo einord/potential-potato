@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, reactive, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import Toast from './components/Toast.vue'
 import UpdaterToast from './components/UpdaterToast.vue'
 import ImageViewer from './components/ImageViewer.vue'
-import { defaultRemoteSettings, RemoteSettings } from '../shared-types/remote-settings'
+import { updaterEvents, type Off } from './lib/events'
+import { useRemoteSettings } from './composables/useRemoteSettings'
 
 const versionToast = ref<InstanceType<typeof Toast> | null>(null)
-const currentSettings = reactive<RemoteSettings>(defaultRemoteSettings)
+const { settings: currentSettings } = useRemoteSettings()
 
 // Error toast state (auto-hide after 20s)
 const errShow = ref(false)
@@ -16,9 +17,11 @@ let errTimer: number | null = null
 // Holds application version shown in bottom-right corner
 const appVersion = ref('')
 
+// Off handlers collected across lifecycle
+const offs: Off[] = []
+
 function showError(msg: string) {
   // Hide main downloading toast if showing
-
   errMessage.value = msg
   errShow.value = true
   if (errTimer) {
@@ -33,7 +36,7 @@ function showError(msg: string) {
 onMounted(async () => {
   versionToast?.value?.show(); // Always show the toast
 
-  const offs: Array<() => void> = []
+  
   // Fetch and display app version from main process
   try {
     if (window.api?.getVersion) {
@@ -41,33 +44,33 @@ onMounted(async () => {
     }
   } catch {}
 
-    // Set updated remote settings when they change
-    const onRemoteSettingsUpdated = window.api?.onRemoteSettingsUpdated
-    if (onRemoteSettingsUpdated) {
-        onRemoteSettingsUpdated(settings => {
-          Object.assign(currentSettings, defaultRemoteSettings, settings)
-
-          // Hide / show the app version depending on settings
-          if (currentSettings.showAppVersion === true) {
-              versionToast.value?.show()
-          } else {
-              versionToast.value?.hide()
-          }
-      })
-    }
-
-  const u = window.api?.updater
-  if (u?.onUpdateError) {
-    offs.push(
-      u.onUpdateError((err) => {
-        showError(err.message)
-      })
-    )
-  }
-  onUnmounted(() => {
-    offs.forEach((off) => off())
-    if (errTimer) window.clearTimeout(errTimer)
+  // React to remote setting toggles (useRemoteSettings keeps it updated)
+  offs.push(() => {
+    // simple off placeholder so offs array is not empty; no-op cleanup
+    return () => {}
   })
+
+  // Apply toast visibility based on current settings (kept synced by composable)
+  setTimeout(() => {
+    if (currentSettings.showAppVersion === true) {
+      versionToast.value?.show()
+    } else {
+      versionToast.value?.hide()
+    }
+  }, 0)
+
+  // Use updater event helpers
+  offs.push(
+    updaterEvents.onError((err) => {
+      setTimeout(() => showError(err.message), 0)
+    })
+  )
+})
+
+// Register cleanup at top-level so Vue can associate it with this component instance
+onUnmounted(() => {
+  if (errTimer) window.clearTimeout(errTimer)
+  offs.forEach((off) => off())
 })
 </script>
 
