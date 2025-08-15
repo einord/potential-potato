@@ -3,6 +3,7 @@ import log from 'electron-log'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import * as fs from 'node:fs'
+import { spawn } from 'node:child_process'
 import { UPDATE_REPO as BUILT_IN_UPDATE_REPO } from './app-config'
 
 interface GitHubRelease {
@@ -503,13 +504,22 @@ export class Updater {
               this.sendToRenderer('update-error', 'Kunde inte starta den nya versionen (fil saknas).')
               return
             }
+
+            // Robust start of new AppImage: spawn detached with proper APPIMAGE env
+            const started = this._spawnLinuxAppImage(launchPath)
+            if (started) {
+              app.exit(0)
+              return
+            }
+
+            // Fallback to Electron relaunch API if spawn failed
             try {
-              log.info(`Relaunching app with execPath=${launchPath}`)
+              log.warn('Spawn failed; falling back to app.relaunch')
               app.relaunch({ execPath: launchPath })
               app.exit(0)
               return
-            } catch (e) {
-              log.error('Failed to relaunch AppImage', e)
+            } catch (e2) {
+              log.error('Failed to relaunch AppImage', e2)
               this.sendToRenderer('update-error', 'Kunde inte starta den nya versionen.')
               return
             }
@@ -626,6 +636,53 @@ export class Updater {
   }
 
   /**
+   * Returns fs.realpathSync(p) if possible; otherwise returns null.
+   */
+  private _realpathIfExists(p: string): string | null {
+    try {
+      return fs.realpathSync(p)
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Returns the actual .AppImage file path of the running app if available (via APPIMAGE env).
+   */
+  private _runningAppImagePath(): string | null {
+    if (process.platform !== 'linux') return null
+    const p = process.env.APPIMAGE
+    if (!p) return null
+    const abs = path.resolve(p)
+    // Prefer realpath to guard against symlinks
+    return this._realpathIfExists(abs) ?? abs
+  }
+
+  /**
+   * Spawns the given AppImage path detached with correct APPIMAGE env.
+   * Returns true if spawn succeeded.
+   */
+  private _spawnLinuxAppImage(appImagePath: string): boolean {
+    try {
+      const resolved = this._realpathIfExists(appImagePath) ?? path.resolve(appImagePath)
+      const env = { ...process.env, APPIMAGE: resolved }
+      // Preserve argv (excluding the current executable), Electron adds --relaunch internally but we mimic args here
+      const args = process.argv.slice(1)
+      const child = spawn(resolved, args, {
+        detached: true,
+        stdio: 'ignore',
+        env,
+      })
+      child.unref()
+      log.info(`Spawned new AppImage: ${resolved} args=[${args.join(' ')}]`)
+      return true
+    } catch (e) {
+      log.error('Failed to spawn AppImage', e)
+      return false
+    }
+  }
+
+  /**
    * Returns true if the symlink at linkPath points to an existing file.
    */
   private _symlinkTargetExists(linkPath: string): boolean {
@@ -682,10 +739,16 @@ export class Updater {
   private cleanupOldAppImages(keep = 2): void {
     if (process.platform !== 'linux') return
     const currentExec = process.execPath
+    const currentReal = this._realpathIfExists(currentExec)
+    const runningAppImage = this._runningAppImagePath()
     const all = this.sortedByNewest(this.listAppImages())
     const toDelete = all.slice(keep)
     for (const f of toDelete) {
-      if (path.resolve(f.file) === path.resolve(currentExec)) continue
+      const abs = path.resolve(f.file)
+      // Protect both the path used to launch (could be a symlink), its real target, and the APPIMAGE file
+      if (abs === path.resolve(currentExec)) continue
+      if (currentReal && abs === path.resolve(currentReal)) continue
+      if (runningAppImage && abs === path.resolve(runningAppImage)) continue
       try {
         fs.unlinkSync(f.file)
         log.info('Deleted old AppImage:', f.file)
@@ -701,9 +764,26 @@ export class Updater {
    */
   private cleanupAppImagesKeep(keepPaths: string[]): void {
     if (process.platform !== 'linux') return
-    const keepResolved = new Set(keepPaths.filter(Boolean).map((p) => path.resolve(p)))
-    // Always keep the running binary
-    keepResolved.add(path.resolve(process.execPath))
+
+    const keepResolved = new Set<string>()
+
+    // Add provided keep paths (both as given and their real targets if they exist)
+    for (const pth of keepPaths.filter(Boolean)) {
+      const abs = path.resolve(pth)
+      keepResolved.add(abs)
+      const real = this._realpathIfExists(abs)
+      if (real) keepResolved.add(path.resolve(real))
+    }
+
+    // Always keep the running binary (both the exec path and its real target if via symlink)
+    const execAbs = path.resolve(process.execPath)
+    keepResolved.add(execAbs)
+    const execReal = this._realpathIfExists(execAbs)
+    if (execReal) keepResolved.add(path.resolve(execReal))
+
+    // Also keep the actual .AppImage file we are currently running (via APPIMAGE)
+    const runningAppImage = this._runningAppImagePath()
+    if (runningAppImage) keepResolved.add(path.resolve(runningAppImage))
 
     const all = this.listAppImages()
     for (const f of all) {

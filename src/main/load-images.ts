@@ -208,6 +208,7 @@ async function initSmb(currentSmbSettings: SmbSettings) {
   const smbSettings: SmbSettings = currentSmbSettings
 
   if (!smbSettings.host || !smbSettings.share) {
+    sendAppError('SMB settings are incomplete. Cannot initialize SMB client.')
     console.error('SMB settings are incomplete. Cannot initialize SMB client.')
     return
   }
