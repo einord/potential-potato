@@ -7,10 +7,10 @@ import { updaterEvents, type Off } from './lib/events'
 import { useRemoteSettings } from './composables/useRemoteSettings'
 
 const versionToast = ref<InstanceType<typeof Toast> | null>(null)
+const errorToast = ref<InstanceType<typeof Toast> | null>(null)
 const { settings: currentSettings } = useRemoteSettings()
 
 // Error toast state (auto-hide after 20s)
-const errShow = ref(false)
 const errMessage = ref('')
 let errTimer: number | null = null
 
@@ -23,12 +23,12 @@ const offs: Off[] = []
 function showError(msg: string) {
   // Hide main downloading toast if showing
   errMessage.value = msg
-  errShow.value = true
+  errorToast.value?.show()
   if (errTimer) {
     window.clearTimeout(errTimer)
   }
   errTimer = window.setTimeout(() => {
-    errShow.value = false
+    errorToast.value?.hide()
     errTimer = null
   }, 20000)
 }
@@ -79,10 +79,10 @@ onUnmounted(() => {
     <ImageViewer />
 
     <!-- Felruta nere till vänster -->
-    <div v-if="errShow" class="toast toast--error">
+    <Toast ref="errorToast" position="bottomLeft" :error="true">
       <p class="title">Fel vid uppdatering</p>
       <p class="detail">{{ errMessage }}</p>
-    </div>
+    </Toast>
 
     <!-- Uppdaterings-toast uppe till höger -->
     <UpdaterToast />
