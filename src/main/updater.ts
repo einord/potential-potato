@@ -626,6 +626,29 @@ export class Updater {
   }
 
   /**
+   * Returns fs.realpathSync(p) if possible; otherwise returns null.
+   */
+  private _realpathIfExists(p: string): string | null {
+    try {
+      return fs.realpathSync(p)
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Returns the actual .AppImage file path of the running app if available (via APPIMAGE env).
+   */
+  private _runningAppImagePath(): string | null {
+    if (process.platform !== 'linux') return null
+    const p = process.env.APPIMAGE
+    if (!p) return null
+    const abs = path.resolve(p)
+    // Prefer realpath to guard against symlinks
+    return this._realpathIfExists(abs) ?? abs
+  }
+
+  /**
    * Returns true if the symlink at linkPath points to an existing file.
    */
   private _symlinkTargetExists(linkPath: string): boolean {
@@ -682,10 +705,16 @@ export class Updater {
   private cleanupOldAppImages(keep = 2): void {
     if (process.platform !== 'linux') return
     const currentExec = process.execPath
+    const currentReal = this._realpathIfExists(currentExec)
+    const runningAppImage = this._runningAppImagePath()
     const all = this.sortedByNewest(this.listAppImages())
     const toDelete = all.slice(keep)
     for (const f of toDelete) {
-      if (path.resolve(f.file) === path.resolve(currentExec)) continue
+      const abs = path.resolve(f.file)
+      // Protect both the path used to launch (could be a symlink), its real target, and the APPIMAGE file
+      if (abs === path.resolve(currentExec)) continue
+      if (currentReal && abs === path.resolve(currentReal)) continue
+      if (runningAppImage && abs === path.resolve(runningAppImage)) continue
       try {
         fs.unlinkSync(f.file)
         log.info('Deleted old AppImage:', f.file)
@@ -701,9 +730,26 @@ export class Updater {
    */
   private cleanupAppImagesKeep(keepPaths: string[]): void {
     if (process.platform !== 'linux') return
-    const keepResolved = new Set(keepPaths.filter(Boolean).map((p) => path.resolve(p)))
-    // Always keep the running binary
-    keepResolved.add(path.resolve(process.execPath))
+
+    const keepResolved = new Set<string>()
+
+    // Add provided keep paths (both as given and their real targets if they exist)
+    for (const pth of keepPaths.filter(Boolean)) {
+      const abs = path.resolve(pth)
+      keepResolved.add(abs)
+      const real = this._realpathIfExists(abs)
+      if (real) keepResolved.add(path.resolve(real))
+    }
+
+    // Always keep the running binary (both the exec path and its real target if via symlink)
+    const execAbs = path.resolve(process.execPath)
+    keepResolved.add(execAbs)
+    const execReal = this._realpathIfExists(execAbs)
+    if (execReal) keepResolved.add(path.resolve(execReal))
+
+    // Also keep the actual .AppImage file we are currently running (via APPIMAGE)
+    const runningAppImage = this._runningAppImagePath()
+    if (runningAppImage) keepResolved.add(path.resolve(runningAppImage))
 
     const all = this.listAppImages()
     for (const f of all) {
