@@ -3,6 +3,7 @@ import log from 'electron-log'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import * as fs from 'node:fs'
+import { spawn } from 'node:child_process'
 import { UPDATE_REPO as BUILT_IN_UPDATE_REPO } from './app-config'
 
 interface GitHubRelease {
@@ -503,13 +504,22 @@ export class Updater {
               this.sendToRenderer('update-error', 'Kunde inte starta den nya versionen (fil saknas).')
               return
             }
+
+            // Robust start of new AppImage: spawn detached with proper APPIMAGE env
+            const started = this._spawnLinuxAppImage(launchPath)
+            if (started) {
+              app.exit(0)
+              return
+            }
+
+            // Fallback to Electron relaunch API if spawn failed
             try {
-              log.info(`Relaunching app with execPath=${launchPath}`)
+              log.warn('Spawn failed; falling back to app.relaunch')
               app.relaunch({ execPath: launchPath })
               app.exit(0)
               return
-            } catch (e) {
-              log.error('Failed to relaunch AppImage', e)
+            } catch (e2) {
+              log.error('Failed to relaunch AppImage', e2)
               this.sendToRenderer('update-error', 'Kunde inte starta den nya versionen.')
               return
             }
@@ -646,6 +656,30 @@ export class Updater {
     const abs = path.resolve(p)
     // Prefer realpath to guard against symlinks
     return this._realpathIfExists(abs) ?? abs
+  }
+
+  /**
+   * Spawns the given AppImage path detached with correct APPIMAGE env.
+   * Returns true if spawn succeeded.
+   */
+  private _spawnLinuxAppImage(appImagePath: string): boolean {
+    try {
+      const resolved = this._realpathIfExists(appImagePath) ?? path.resolve(appImagePath)
+      const env = { ...process.env, APPIMAGE: resolved }
+      // Preserve argv (excluding the current executable), Electron adds --relaunch internally but we mimic args here
+      const args = process.argv.slice(1)
+      const child = spawn(resolved, args, {
+        detached: true,
+        stdio: 'ignore',
+        env,
+      })
+      child.unref()
+      log.info(`Spawned new AppImage: ${resolved} args=[${args.join(' ')}]`)
+      return true
+    } catch (e) {
+      log.error('Failed to spawn AppImage', e)
+      return false
+    }
   }
 
   /**
