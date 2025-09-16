@@ -118,44 +118,61 @@ export async function loadNextImage(mainWindow: BrowserWindow) {
   if (!mainWindow || mainWindow.isDestroyed()) return
 
   console.log(`Refreshing image...`)
-  try {
-    // Pass current filename to avoid loading the same image twice
-    const currentFileName = cachedImageData?.fileName
-    const imageData = await loadSmbImage(currentFileName)
-    console.log('Random image loaded from SMB: ', imageData.fileName)
-    if (imageData) {
-      // Cache the image data
-      cachedImageData = imageData
 
-      // Emit remote settings update if changed
-      try {
-        const settingsJson = JSON.stringify(imageData.settings ?? {})
-        if (settingsJson !== lastRemoteSettingsJson) {
-          lastRemoteSettingsJson = settingsJson
-          // Ensure payload is structured-cloneable across IPC
-          const plainSettings = JSON.parse(
-            JSON.stringify(imageData.settings ?? {})
-          ) as RemoteSettings
-          mainWindow.webContents.send('remote-settings-updated', plainSettings)
+  // Retry up to 10 times before giving up, with a short backoff between attempts
+  const maxAttempts = 10
+  let lastError: any = null
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    try {
+      // Pass current filename to avoid loading the same image twice
+      const currentFileName = cachedImageData?.fileName
+      const imageData = await loadSmbImage(currentFileName)
+      console.log(`Random image loaded from SMB (attempt ${attempt}/${maxAttempts}): `, imageData.fileName)
+      if (imageData) {
+        // Cache the image data
+        cachedImageData = imageData
+
+        // Emit remote settings update if changed
+        try {
+          const settingsJson = JSON.stringify(imageData.settings ?? {})
+          if (settingsJson !== lastRemoteSettingsJson) {
+            lastRemoteSettingsJson = settingsJson
+            // Ensure payload is structured-cloneable across IPC
+            const plainSettings = JSON.parse(
+              JSON.stringify(imageData.settings ?? {})
+            ) as RemoteSettings
+            mainWindow.webContents.send('remote-settings-updated', plainSettings)
+          }
+        } catch {
+          // ignore JSON stringify errors
+          console.error('Error stringifying remote settings')
         }
-      } catch {
-        // ignore JSON stringify errors
-        console.error('Error stringifying remote settings')
+
+        // Send the image data to the renderer process
+        mainWindow.webContents.send('new-image', imageData.dataUrl)
       }
 
-      // Send the image data to the renderer process
-      mainWindow.webContents.send('new-image', imageData.dataUrl)
+      if (getTimeoutFromRefreshRate(remoteSettings?.refreshRate) != timeout) {
+        console.log('Remote timer settings changed, resetting refresh timer.')
+        setRefreshTimer(mainWindow)
+      }
+      return
+    } catch (error: any) {
+      lastError = error
+      console.error(`Error loading next image (attempt ${attempt}/${maxAttempts}):`, error)
+      if (attempt < maxAttempts) {
+        // short backoff before retrying to handle transient SMB errors
+        await new Promise((r) => setTimeout(r, 300))
+        continue
+      }
     }
-
-    if (getTimeoutFromRefreshRate(remoteSettings?.refreshRate) != timeout) {
-      console.log('Remote timer settings changed, resetting refresh timer.')
-      setRefreshTimer(mainWindow)
-    }
-  } catch (error: any) {
-    console.error('Error loading next image:', error)
-    sendAppError(`Failed to load next image: ${error?.message ?? error}`)
-    setRefreshTimer(mainWindow)
   }
+
+  // After exhausting retries, report error and schedule next cycle
+  sendAppError(`Failed to load next image after ${maxAttempts} attempts: ${lastError?.message ?? lastError}`)
+  setRefreshTimer(mainWindow)
 }
 
 export async function loadSmbImage(currentFileName?: string): Promise<CachedImage> {

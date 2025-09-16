@@ -702,55 +702,83 @@ export class Updater {
     return startsOk && n.endsWith('.appimage')
   }
 
-  /**
-   * Ensures ~/.config/autostart/potential-potato.desktop exists and points
-   * to the stable symlink so the app auto-starts on login.
-   */
+//   /**
+//    * Ensures ~/.config/autostart/potential-potato.desktop exists and points
+//    * to the stable symlink so the app auto-starts on login.
+//    */
+//   private ensureAutostartDesktop(): void {
+//     if (process.platform !== 'linux') return
+//     try {
+//       fs.mkdirSync(this.LINUX_AUTOSTART_DIR, { recursive: true })
+//     } catch {}
+//     const execPath = this.LINUX_BIN_LINK
+
+//     // Build a bash command that moves the mouse to bottom-right if possible
+//     // - X11: uses xdotool + xdpyinfo
+//     // - Wayland: uses ydotool with resolution from wlr-randr or swaymsg (fallback to POTATO_SCREEN_WIDTH/HEIGHT)
+//     // After attempting mouse move, exec the app.
+//     const mouseScript = `\
+// if command -v xdotool > /dev/null 2>&1 && [ "\${XDG_SESSION_TYPE:-x11}" = "x11" ]; then
+//   if command -v xdpyinfo > /dev/null 2>&1; then
+//     read W H < <(xdpyinfo | awk '/dimensions/{split($2,a,"x"); print a[1],a[2]}')
+//     xdotool mousemove $((W-1)) $((H-1))
+//   fi
+// elif [ "\${XDG_SESSION_TYPE:-}" = "wayland" ] && command -v ydotool > /dev/null 2>&1; then
+//   if command -v wlr-randr > /dev/null 2>&1; then
+//     read W H < <(wlr-randr | awk '/\*/{split($1,a,"x"); print a[1],a[2]; exit}')
+//   elif command -v swaymsg > /dev/null 2>&1; then
+//     read W H < <(swaymsg -t get_outputs | awk '/current_mode/ {gsub(/,/, ""); split($2,a,"x"); print a[1],a[2]; exit}')
+//   else
+//     W=\${POTATO_SCREEN_WIDTH:-0}
+//     H=\${POTATO_SCREEN_HEIGHT:-0}
+//   fi
+//   if [ "\${W}" -gt 0 ] && [ "\${H}" -gt 0 ]; then
+//     if ydotool mousemove --help 2>&1 | grep -q -- "--absolute"; then
+//       ydotool mousemove --absolute $((W-1)) $((H-1))
+//     else
+//       ydotool mousemove $((W-1)) $((H-1))
+//     fi
+//   fi
+// fi
+// exec ${execPath}`
+//     const mouseScriptEscaped = mouseScript.replace(/\"/g, '\\\\"')
+//     const execLine = `Exec=/bin/bash -lc \"${mouseScriptEscaped}\"`
+    
+
+//     const desktop =
+//       [
+//         '[Desktop Entry]',
+//         'Type=Application',
+//         'Name=Potential Potato',
+//         'Comment=Start Potential Potato at login',
+//         execLine,
+//         'Icon=potential-potato',
+//         'X-GNOME-Autostart-enabled=true',
+//         'Terminal=false',
+//         'Categories=Utility;',
+//       ].join('\n') + '\n'
+
+//     try {
+//       fs.writeFileSync(this.LINUX_DESKTOP_FILE, desktop, { encoding: 'utf-8', mode: 0o644 })
+//       log.info(`Autostart desktop file ensured at ${this.LINUX_DESKTOP_FILE} (with mouse move on X11 if available)`) 
+//     } catch (e) {
+//       log.warn('Failed to write autostart desktop file', e)
+//     }
+//   }
+
   private ensureAutostartDesktop(): void {
     if (process.platform !== 'linux') return
     try {
       fs.mkdirSync(this.LINUX_AUTOSTART_DIR, { recursive: true })
     } catch {}
     const execPath = this.LINUX_BIN_LINK
-
-    // Build a bash command that moves the mouse to bottom-right if possible
-    // - X11: uses xdotool + xdpyinfo
-    // - Wayland: uses ydotool with resolution from wlr-randr or swaymsg (fallback to POTATO_SCREEN_WIDTH/HEIGHT)
-    // After attempting mouse move, exec the app.
-    const mouseScript = `\
-if command -v xdotool > /dev/null 2>&1 && [ "\${XDG_SESSION_TYPE:-x11}" = "x11" ]; then
-  if command -v xdpyinfo > /dev/null 2>&1; then
-    read W H < <(xdpyinfo | awk '/dimensions/{split($2,a,"x"); print a[1],a[2]}')
-    xdotool mousemove $((W-1)) $((H-1))
-  fi
-elif [ "\${XDG_SESSION_TYPE:-}" = "wayland" ] && command -v ydotool > /dev/null 2>&1; then
-  if command -v wlr-randr > /dev/null 2>&1; then
-    read W H < <(wlr-randr | awk '/\*/{split($1,a,"x"); print a[1],a[2]; exit}')
-  elif command -v swaymsg > /dev/null 2>&1; then
-    read W H < <(swaymsg -t get_outputs | awk '/current_mode/ {gsub(/,/, ""); split($2,a,"x"); print a[1],a[2]; exit}')
-  else
-    W=\${POTATO_SCREEN_WIDTH:-0}
-    H=\${POTATO_SCREEN_HEIGHT:-0}
-  fi
-  if [ "\${W}" -gt 0 ] && [ "\${H}" -gt 0 ]; then
-    if ydotool mousemove --help 2>&1 | grep -q -- "--absolute"; then
-      ydotool mousemove --absolute $((W-1)) $((H-1))
-    else
-      ydotool mousemove $((W-1)) $((H-1))
-    fi
-  fi
-fi
-exec ${execPath}`
-    const mouseScriptEscaped = mouseScript.replace(/\"/g, '\\\\"')
-    const execLine = `Exec=/bin/bash -lc \"${mouseScriptEscaped}\"`
-
     const desktop =
       [
         '[Desktop Entry]',
         'Type=Application',
         'Name=Potential Potato',
         'Comment=Start Potential Potato at login',
-        execLine,
+        `Exec=${execPath}`,
         'Icon=potential-potato',
         'X-GNOME-Autostart-enabled=true',
         'Terminal=false',
@@ -759,7 +787,7 @@ exec ${execPath}`
 
     try {
       fs.writeFileSync(this.LINUX_DESKTOP_FILE, desktop, { encoding: 'utf-8', mode: 0o644 })
-      log.info(`Autostart desktop file ensured at ${this.LINUX_DESKTOP_FILE} (with mouse move on X11 if available)`) 
+      log.info(`Autostart desktop file ensured at ${this.LINUX_DESKTOP_FILE}`)
     } catch (e) {
       log.warn('Failed to write autostart desktop file', e)
     }
