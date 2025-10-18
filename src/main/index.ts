@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, ipcMain } from 'electron'
+import { app, BrowserWindow, Menu, ipcMain, powerSaveBlocker } from 'electron'
 import { join } from 'node:path'
 import { Updater } from './updater'
 import { cachedImageData, ensureSmbSettingsFile, loadNextImage, loadSmbSettings, watchSmbSettingsFile, setEventWindow, markRendererReady, drainPendingErrors } from './load-images'
@@ -6,6 +6,7 @@ import { cachedImageData, ensureSmbSettingsFile, loadNextImage, loadSmbSettings,
 let mainWindow: BrowserWindow | null = null
 let updater: Updater | null = null
 let initialized = false
+let powerSaveBlockerId: number | null = null
 
 async function createWindow() {
   mainWindow = new BrowserWindow({
@@ -61,6 +62,13 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   // Ensure timers are cleared
   updater?.dispose()
+  // Stop power save blocker
+  if (powerSaveBlockerId !== null) {
+    try { powerSaveBlocker.stop(powerSaveBlockerId) } catch(e) {
+      console.warn('Failed to stop power save blocker', e)
+    }
+    powerSaveBlockerId = null
+  }
 })
 
 app.whenReady().then(async () => {
@@ -91,6 +99,11 @@ app.whenReady().then(async () => {
   })
 
   await createWindow()
+
+  // Prevent display sleep/screensaver while app is running
+  try {
+    powerSaveBlockerId = powerSaveBlocker.start('prevent-display-sleep')
+  } catch {}
 })
 
 async function startInit() {
