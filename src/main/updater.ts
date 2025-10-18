@@ -597,12 +597,23 @@ export class Updater {
 
   /**
    * Updates ~/.local/bin/potential-potato to point to the newest AppImage.
+   * If none are found (first run), fall back to the currently running AppImage.
    */
   private updateSymlinkToLatest(): void {
     if (process.platform !== 'linux') return
+    // Prefer newest in ~/Applications; else use the running AppImage (first-run fallback)
     const all = this.sortedByNewest(this.listAppImages())
-    if (all.length === 0) return
-    const latest = all[0].file
+    let candidate: string | null = null
+    if (all.length > 0) {
+      candidate = all[0].file
+    } else {
+      candidate = this._runningAppImagePath()
+      if (candidate) {
+        log.info('No AppImages found in ~/Applications; falling back to running AppImage for symlink')
+      }
+    }
+    if (!candidate) return
+
     const linkDir = path.dirname(this.LINUX_BIN_LINK)
     try {
       fs.mkdirSync(linkDir, { recursive: true })
@@ -611,9 +622,9 @@ export class Updater {
       try {
         fs.unlinkSync(this.LINUX_BIN_LINK)
       } catch {}
-      fs.symlinkSync(latest, this.LINUX_BIN_LINK)
+      fs.symlinkSync(candidate, this.LINUX_BIN_LINK)
       fs.chmodSync(this.LINUX_BIN_LINK, 0o755)
-      log.info(`Symlink updated ${this.LINUX_BIN_LINK} -> ${latest}`)
+      log.info(`Symlink updated ${this.LINUX_BIN_LINK} -> ${candidate}`)
     } catch (e) {
       log.warn('Failed to create/update symlink', e)
     }
