@@ -4,9 +4,13 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 import * as fs from 'node:fs'
 import { spawn } from 'node:child_process'
-import { UPDATE_REPO as BUILT_IN_UPDATE_REPO } from './app-config'
+import {
+  UPDATE_REPO as BUILT_IN_UPDATE_REPO,
+  UPDATE_API_BASE as BUILT_IN_UPDATE_API_BASE,
+} from './app-config'
 
-interface GitHubRelease {
+// Shape of the release JSON returned by both GitHub and Forgejo/Gitea.
+interface ReleaseInfo {
   tag_name: string
   name: string
   published_at: string
@@ -23,10 +27,12 @@ export class Updater {
   private updateCheckInterval: NodeJS.Timeout | null = null
   /** Current application version (from app.getVersion()). */
   private currentVersion: string
-  /** GitHub owner (from config/env). */
+  /** Release host owner (from config/env). */
   private owner: string | null
-  /** GitHub repo name (from config/env). */
+  /** Release host repo name (from config/env). */
   private repo: string | null
+  /** Base URL of the release-hosting API (GitHub or Forgejo/Gitea). */
+  private apiBase: string
 
   // Linux AppImage management
   private readonly LINUX_APP_DIR = path.join(os.homedir(), 'Applications')
@@ -45,7 +51,7 @@ export class Updater {
     this.mainWindow = mainWindow
     this.currentVersion = currentVersion
 
-    // Built-in config as default; can be overridden by env var if present
+    // Built-in config as default; can be overridden by env vars if present
     const inlineRepo = BUILT_IN_UPDATE_REPO
     const repoEnv = process.env.UPDATE_REPO // expected format: "owner/repo"
 
@@ -64,6 +70,15 @@ export class Updater {
       log.warn(
         'Updater disabled: set UPDATE_REPO (built-in config or env) to "owner/repo" to enable hourly update checks.'
       )
+    }
+
+    // API base URL (GitHub or Forgejo/Gitea). Strip any trailing slash so
+    // we can safely concatenate "/repos/...".
+    const apiBaseEnv = process.env.UPDATE_API_BASE
+    const apiBaseSource = apiBaseEnv && apiBaseEnv.length > 0 ? apiBaseEnv : BUILT_IN_UPDATE_API_BASE
+    this.apiBase = apiBaseSource.replace(/\/+$/, '')
+    if (apiBaseEnv && apiBaseEnv !== BUILT_IN_UPDATE_API_BASE) {
+      log.info('UPDATE_API_BASE overridden by environment variable')
     }
 
     this.setup()
@@ -142,22 +157,20 @@ export class Updater {
       log.info('Checking for updates...')
       this.sendToRenderer('update-checking')
 
-      const response = await fetch(
-        `https://api.github.com/repos/${this.owner}/${this.repo}/releases/latest`,
-        {
-          headers: {
-            Accept: 'application/vnd.github+json',
-            // Per GitHub API guidance to avoid 403s
-            'User-Agent': `${this.repo}-updater`,
-          },
-        }
-      )
+      const latestUrl = `${this.apiBase}/repos/${this.owner}/${this.repo}/releases/latest`
+      const response = await fetch(latestUrl, {
+        headers: {
+          Accept: 'application/json',
+          // Per GitHub API guidance to avoid 403s; harmless on Forgejo/Gitea.
+          'User-Agent': `${this.repo}-updater`,
+        },
+      })
 
       if (!response.ok) {
-        throw new Error(`GitHub API error: ${response.status}`)
+        throw new Error(`Release API error: ${response.status} (${latestUrl})`)
       }
 
-      const release: GitHubRelease = (await response.json()) as GitHubRelease
+      const release: ReleaseInfo = (await response.json()) as ReleaseInfo
       const latestVersion = release.tag_name.replace(/^v/, '')
 
       log.info(`Current version: ${this.currentVersion}, Latest version: ${latestVersion}`)
@@ -237,7 +250,7 @@ export class Updater {
   /**
    * Picks the most suitable release asset for the current platform/arch.
    */
-  private findAssetForPlatform(release: GitHubRelease) {
+  private findAssetForPlatform(release: ReleaseInfo) {
     const assets = release.assets || []
     const plat = process.platform
 

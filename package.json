@@ -77,7 +77,8 @@
       "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
     },
     "asar": true,
-    "npmRebuild": true
+    "npmRebuild": true,
+    "publish": null
   },
   "engines": {
     "node": ">=18"
