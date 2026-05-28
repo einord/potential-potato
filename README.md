@@ -1,3 +1,5 @@
+> **Moved to Forgejo:** This project now lives at [forgejo.nyqvist.app/jonte/potential-potato](https://forgejo.nyqvist.app/jonte/potential-potato). The GitHub repository is archived and kept as a read-only pointer to the new home.
+
 # Potential Potato
 
 Electron + Vue + Vite starter that targets macOS and Raspberry Pi (armv7l/arm64).
